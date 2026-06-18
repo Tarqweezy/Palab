@@ -1,0 +1,1295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Palab">
+<meta name="theme-color" content="#1565C0">
+<title>Palab – GK Swimming Pools</title>
+<link rel="manifest" href="manifest.json">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  :root{
+    --blue:#1565C0;--blue-light:#1976D2;--blue-pale:#E3F2FD;--blue-dark:#0D47A1;
+    --green:#2E7D32;--green-light:#E8F5E9;
+    --red:#C62828;--red-light:#FFEBEE;
+    --orange:#E65100;--orange-light:#FFF3E0;
+    --gray-50:#FAFAFA;--gray-100:#F5F5F5;--gray-200:#EEEEEE;--gray-300:#E0E0E0;
+    --gray-400:#BDBDBD;--gray-500:#9E9E9E;--gray-600:#757575;--gray-700:#616161;
+    --gray-800:#424242;--gray-900:#212121;
+    --text:#1A1A2E;--text-muted:#6B7280;--surface:#FFFFFF;
+    --radius:12px;--radius-sm:8px;--radius-lg:16px;
+    --nav-height:68px;--header-height:60px;
+  }
+  html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif;background:var(--gray-50);color:var(--text)}
+  #app{height:100%;display:flex;flex-direction:column;max-width:430px;margin:0 auto;background:var(--surface);position:relative;box-shadow:0 0 40px rgba(0,0,0,.12)}
+  .screen{display:none;flex:1;flex-direction:column;overflow:hidden}
+  .screen.active{display:flex}
+  .scroll-area{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:20px}
+  .scroll-area::-webkit-scrollbar{display:none}
+
+  /* Header */
+  .header{padding:16px 20px 12px;background:var(--surface);border-bottom:1px solid var(--gray-200);flex-shrink:0}
+  .header-top{display:flex;align-items:center;justify-content:space-between}
+  .header-date{font-size:13px;color:var(--text-muted);margin-bottom:2px}
+  .header-title{font-size:26px;font-weight:700;color:var(--text);letter-spacing:-.5px}
+  .header-simple{padding:14px 20px;background:var(--surface);border-bottom:1px solid var(--gray-200);flex-shrink:0;display:flex;align-items:center;gap:12px}
+  .back-btn{width:36px;height:36px;border-radius:50%;background:var(--gray-100);border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
+  .back-btn svg{color:var(--blue)}
+  .screen-title{font-size:18px;font-weight:600;color:var(--text);flex:1;text-align:center}
+  .header-action{width:36px;height:36px;border-radius:50%;background:var(--gray-100);border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--blue)}
+
+  /* Bottom Nav */
+  .bottom-nav{display:flex;background:var(--surface);border-top:1px solid var(--gray-200);flex-shrink:0;height:var(--nav-height);padding-bottom:env(safe-area-inset-bottom)}
+  .nav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;border:none;background:none;padding:6px 0;color:var(--gray-500);transition:color .2s}
+  .nav-item.active{color:var(--blue)}
+  .nav-item svg{width:22px;height:22px;flex-shrink:0}
+  .nav-item span{font-size:10px;font-weight:500}
+
+  /* Cards */
+  .card{background:var(--surface);border:1px solid var(--gray-200);border-radius:var(--radius);overflow:hidden}
+  .card-pad{padding:16px}
+
+  /* Route Progress Card */
+  .route-card{background:var(--blue);border-radius:var(--radius-lg);padding:20px;margin:0 20px 20px;color:#fff}
+  .route-label{font-size:13px;opacity:.85;margin-bottom:4px}
+  .route-progress-text{font-size:32px;font-weight:700;margin-bottom:12px}
+  .progress-bar-bg{background:rgba(255,255,255,.25);border-radius:4px;height:6px}
+  .progress-bar-fill{background:#fff;border-radius:4px;height:6px;transition:width .4s ease}
+
+  /* List items */
+  .list-item{display:flex;align-items:center;padding:14px 20px;border-bottom:1px solid var(--gray-100);cursor:pointer;transition:background .15s;gap:12px;background:var(--surface)}
+  .list-item:active{background:var(--gray-50)}
+  .list-item:last-child{border-bottom:none}
+  .item-avatar{width:40px;height:40px;border-radius:50%;background:var(--blue-pale);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;color:var(--blue);flex-shrink:0}
+  .item-info{flex:1;min-width:0}
+  .item-name{font-size:15px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .item-sub{font-size:12px;color:var(--text-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .item-meta{display:flex;gap:6px;margin-top:4px;flex-wrap:wrap}
+  .meta-pill{background:var(--blue-pale);color:var(--blue);font-size:11px;font-weight:600;padding:2px 7px;border-radius:20px}
+  .chevron{color:var(--gray-400);flex-shrink:0}
+
+  /* Badges */
+  .badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px}
+  .badge-sent{background:var(--green-light);color:var(--green)}
+  .badge-draft{background:var(--gray-100);color:var(--gray-600)}
+  .badge-error{background:var(--red-light);color:var(--red)}
+
+  /* Section headers */
+  .section-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px 8px}
+  .section-title{font-size:17px;font-weight:700;color:var(--text)}
+  .section-link{font-size:14px;color:var(--blue);font-weight:500}
+
+  /* Empty state */
+  .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center;color:var(--text-muted)}
+  .empty-icon{margin-bottom:16px;opacity:.35}
+  .empty h3{font-size:16px;font-weight:600;color:var(--gray-700);margin-bottom:6px}
+  .empty p{font-size:13px;line-height:1.5}
+
+  /* Day Selector */
+  .day-selector{display:flex;gap:8px;padding:16px 20px;overflow-x:auto;flex-shrink:0}
+  .day-selector::-webkit-scrollbar{display:none}
+  .day-btn{min-width:46px;padding:10px 8px;border-radius:24px;border:none;background:var(--gray-100);color:var(--text-muted);font-size:13px;font-weight:500;cursor:pointer;transition:all .2s;text-align:center;line-height:1.4}
+  .day-btn.active{background:var(--blue);color:#fff}
+  .day-num{font-size:11px;opacity:.7}
+
+  /* Buttons */
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 20px;border-radius:var(--radius);font-size:15px;font-weight:600;cursor:pointer;border:none;transition:all .2s}
+  .btn-primary{background:var(--blue);color:#fff}
+  .btn-primary:active{background:var(--blue-dark)}
+  .btn-secondary{background:var(--gray-100);color:var(--text)}
+  .btn-secondary:active{background:var(--gray-200)}
+  .btn-outline{background:transparent;border:1.5px solid var(--blue);color:var(--blue)}
+  .btn-danger{background:var(--red-light);color:var(--red);border:1.5px solid var(--red)}
+  .btn-sm{padding:7px 14px;font-size:13px;border-radius:var(--radius-sm)}
+  .btn-full{width:100%}
+
+  /* Report button in route */
+  .report-btn{background:var(--blue-pale);color:var(--blue);border:none;padding:7px 14px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;flex-shrink:0}
+
+  /* Form */
+  .form-group{margin-bottom:16px}
+  .form-label{font-size:13px;font-weight:600;color:var(--text-muted);margin-bottom:6px;display:block;text-transform:uppercase;letter-spacing:.3px}
+  .form-input{width:100%;padding:12px 14px;border:1.5px solid var(--gray-300);border-radius:var(--radius-sm);font-size:15px;color:var(--text);background:var(--surface);outline:none;transition:border-color .2s;-webkit-appearance:none}
+  .form-input:focus{border-color:var(--blue)}
+  .form-select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236B7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+  .form-section{background:var(--gray-50);border-radius:var(--radius);padding:16px;margin-bottom:16px;border:1px solid var(--gray-200)}
+  .form-section-title{font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px}
+
+  /* Toggle */
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+  .toggle-label{font-size:15px;font-weight:500;color:var(--text)}
+  .toggle{position:relative;width:48px;height:28px}
+  .toggle input{opacity:0;width:0;height:0}
+  .toggle-track{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:var(--gray-300);border-radius:14px;transition:.3s}
+  .toggle-track:before{position:absolute;content:"";height:22px;width:22px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.3s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+  input:checked+.toggle-track{background:var(--blue)}
+  input:checked+.toggle-track:before{transform:translateX(20px)}
+
+  /* Chemical reading rows */
+  .reading-row{display:flex;align-items:center;justify-content:space-between;padding:13px 0;border-bottom:1px solid var(--gray-100)}
+  .reading-row:last-child{border-bottom:none}
+  .reading-name{font-size:14px;color:var(--gray-600)}
+  .reading-val{font-size:15px;font-weight:700;color:var(--text)}
+  .reading-val.low{color:#E65100}
+  .reading-val.good{color:var(--green)}
+  .reading-val.high{color:var(--red)}
+
+  /* Client profile */
+  .profile-header{padding:28px 20px 20px;text-align:center;border-bottom:1px solid var(--gray-100)}
+  .profile-avatar{width:72px;height:72px;border-radius:50%;background:var(--blue-pale);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;color:var(--blue);margin:0 auto 12px}
+  .profile-name{font-size:22px;font-weight:700;color:var(--text)}
+  .profile-day{font-size:14px;color:var(--blue);margin-top:4px}
+  .action-buttons{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:16px 20px}
+  .action-btn{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 8px;background:var(--gray-100);border-radius:var(--radius);border:none;cursor:pointer;color:var(--text-muted);font-size:12px;font-weight:500;transition:all .2s}
+  .action-btn.primary{background:var(--blue);color:#fff}
+  .action-btn:active{opacity:.8}
+  .action-btn svg{width:22px;height:22px}
+
+  /* Info section */
+  .info-section{margin:0 20px 16px}
+  .info-section-title{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+  .info-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--gray-100)}
+  .info-row:last-child{border-bottom:none}
+  .info-row svg{color:var(--gray-500);flex-shrink:0;width:16px;height:16px}
+  .info-val{font-size:14px;color:var(--text)}
+
+  /* Message bubbles */
+  .msg-thread{padding:16px 20px;display:flex;flex-direction:column;gap:12px}
+  .bubble-wrap{display:flex;flex-direction:column}
+  .bubble-wrap.sent{align-items:flex-end}
+  .bubble-wrap.recv{align-items:flex-start}
+  .bubble{max-width:78%;padding:10px 14px;border-radius:18px;font-size:15px;line-height:1.4}
+  .bubble.sent{background:var(--blue);color:#fff;border-bottom-right-radius:4px}
+  .bubble.recv{background:var(--gray-100);color:var(--text);border-bottom-left-radius:4px}
+  .bubble-time{font-size:11px;color:var(--text-muted);margin-top:3px;padding:0 4px}
+  .msg-input-bar{padding:10px 16px;border-top:1px solid var(--gray-200);display:flex;gap:10px;align-items:flex-end;background:var(--surface);flex-shrink:0}
+  .msg-input{flex:1;padding:10px 14px;border:1.5px solid var(--gray-300);border-radius:22px;font-size:15px;outline:none;resize:none;max-height:100px;min-height:40px;font-family:inherit}
+  .msg-input:focus{border-color:var(--blue)}
+  .send-btn{width:40px;height:40px;border-radius:50%;background:var(--blue);border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
+
+  /* Schedule banner */
+  .schedule-banner{background:var(--blue-pale);border:1.5px solid var(--blue);border-radius:var(--radius-sm);padding:12px 14px;margin:8px 20px;display:flex;align-items:center;gap:10px;cursor:pointer}
+  .schedule-banner-text{flex:1;font-size:13px;color:var(--blue);font-weight:500}
+
+  /* Modals */
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;display:flex;align-items:flex-end;justify-content:center}
+  .modal{background:var(--surface);border-radius:var(--radius-lg) var(--radius-lg) 0 0;width:100%;max-width:430px;max-height:90vh;overflow-y:auto;padding:20px}
+  .modal-handle{width:36px;height:4px;background:var(--gray-300);border-radius:2px;margin:0 auto 20px}
+  .modal-title{font-size:18px;font-weight:700;margin-bottom:20px;color:var(--text)}
+  .modal-footer{display:flex;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-100)}
+
+  /* Report detail */
+  .report-header-card{margin:16px 20px;border:1px solid var(--gray-200);border-radius:var(--radius-lg);padding:16px}
+  .report-client-name{font-size:20px;font-weight:700;color:var(--text)}
+  .report-client-sub{font-size:13px;color:var(--text-muted);margin-top:3px}
+  .report-date{font-size:13px;color:var(--text-muted);margin-top:6px}
+  .report-section{margin:0 20px 16px;border:1px solid var(--gray-200);border-radius:var(--radius)}
+  .report-section-title{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;padding:12px 16px 0}
+  .report-section-body{padding:0 16px 12px}
+
+  /* Toast */
+  .toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--gray-900);color:#fff;padding:12px 20px;border-radius:var(--radius);font-size:14px;font-weight:500;z-index:200;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
+  .toast.show{opacity:1}
+
+  /* FAB */
+  .fab{position:fixed;bottom:calc(var(--nav-height) + 16px);right:20px;width:52px;height:52px;border-radius:50%;background:var(--blue);color:#fff;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 16px rgba(21,101,192,.4);z-index:50}
+
+  /* Upcoming item */
+  .upcoming-item{padding:14px 20px;border-bottom:1px solid var(--gray-100);cursor:pointer;transition:background .15s;display:flex;align-items:center;gap:0}
+  .upcoming-item:active{background:var(--gray-50)}
+  .upcoming-left-bar{width:3px;border-radius:2px;background:var(--blue);margin-right:14px;align-self:stretch;min-height:40px;flex-shrink:0}
+  .upcoming-info{flex:1}
+  .upcoming-name{font-size:15px;font-weight:600;color:var(--text)}
+  .upcoming-time{font-size:13px;color:var(--text-muted);margin-top:2px}
+
+  /* Route stop */
+  .stop-item{display:flex;align-items:center;padding:14px 20px;border-bottom:1px solid var(--gray-100);gap:12px;background:var(--surface)}
+  .stop-num{width:30px;height:30px;border-radius:50%;background:var(--blue-pale);color:var(--blue);font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .stop-info{flex:1;min-width:0}
+  .stop-name{font-size:15px;font-weight:600;color:var(--text)}
+  .stop-addr{font-size:12px;color:var(--text-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* Pill selector (Low/Good/High) */
+  .pill-group{display:flex;gap:8px}
+  .pill-opt{padding:8px 16px;border-radius:20px;border:1.5px solid var(--gray-300);font-size:13px;font-weight:600;cursor:pointer;color:var(--text-muted);background:var(--surface);transition:all .2s}
+  .pill-opt.active-low{border-color:#E65100;color:#E65100;background:var(--orange-light)}
+  .pill-opt.active-good{border-color:var(--green);color:var(--green);background:var(--green-light)}
+  .pill-opt.active-high{border-color:var(--red);color:var(--red);background:var(--red-light)}
+
+  /* Drag handle */
+  .drag-handle{color:var(--gray-400);cursor:grab;padding:0 4px}
+
+  /* Notes */
+  .notes-text{font-size:14px;color:var(--text);padding:10px 0}
+
+  /* Range hint */
+  .range-hint{font-size:11px;color:var(--text-muted);margin-top:4px}
+  .range-hint.warn{color:var(--orange)}
+  .range-hint.ok{color:var(--green)}
+  .range-hint.bad{color:var(--red)}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ===== HOME SCREEN ===== -->
+  <div id="screen-home" class="screen active">
+    <div class="header">
+      <div class="header-top">
+        <div>
+          <div class="header-date" id="home-date"></div>
+          <div class="header-title">Palab</div>
+        </div>
+        <button class="header-action" onclick="showScreen('route')">
+          <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="scroll-area" style="padding-top:20px">
+      <div class="route-card" id="route-card" onclick="showScreen('route')">
+        <div class="route-label">Today's Route</div>
+        <div class="route-progress-text" id="route-progress-text">0/0 done</div>
+        <div class="progress-bar-bg"><div class="progress-bar-fill" id="route-progress-bar" style="width:0%"></div></div>
+      </div>
+
+      <div class="section-head">
+        <span class="section-title">Upcoming</span>
+        <span class="section-link" onclick="showScreen('route')">See all</span>
+      </div>
+      <div id="upcoming-list"></div>
+    </div>
+  </div>
+
+  <!-- ===== ROUTE SCREEN ===== -->
+  <div id="screen-route" class="screen">
+    <div class="header">
+      <div class="header-title" style="font-size:22px">Route</div>
+    </div>
+    <div class="day-selector" id="day-selector"></div>
+    <div class="scroll-area" id="route-list"></div>
+  </div>
+
+  <!-- ===== CLIENTS SCREEN ===== -->
+  <div id="screen-clients" class="screen">
+    <div class="header">
+      <div class="header-title" style="font-size:22px">Clients</div>
+    </div>
+    <div class="scroll-area" id="clients-list"></div>
+    <button class="fab" onclick="openAddClient()">
+      <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+  </div>
+
+  <!-- ===== REPORTS SCREEN ===== -->
+  <div id="screen-reports" class="screen">
+    <div class="header">
+      <div class="header-title" style="font-size:22px">Reports</div>
+    </div>
+    <div class="scroll-area" id="reports-list"></div>
+  </div>
+
+  <!-- ===== MESSAGES SCREEN ===== -->
+  <div id="screen-messages" class="screen">
+    <div class="header">
+      <div class="header-title" style="font-size:22px">Messages</div>
+    </div>
+    <div class="scroll-area" id="messages-list"></div>
+  </div>
+
+  <!-- ===== CLIENT DETAIL ===== -->
+  <div id="screen-client-detail" class="screen">
+    <div class="header-simple">
+      <button class="back-btn" onclick="goBack()">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span class="screen-title">Client</span>
+      <button class="header-action" onclick="openEditClient()">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      </button>
+    </div>
+    <div class="scroll-area" id="client-detail-body"></div>
+  </div>
+
+  <!-- ===== REPORT DETAIL ===== -->
+  <div id="screen-report-detail" class="screen">
+    <div class="header-simple">
+      <button class="back-btn" onclick="goBack()">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span class="screen-title">Report</span>
+      <div style="width:36px"></div>
+    </div>
+    <div class="scroll-area" id="report-detail-body"></div>
+  </div>
+
+  <!-- ===== MESSAGE THREAD ===== -->
+  <div id="screen-msg-thread" class="screen">
+    <div class="header-simple">
+      <button class="back-btn" onclick="goBack()">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <div style="flex:1;text-align:center">
+        <div class="screen-title" id="thread-client-name"></div>
+        <div style="font-size:12px;color:var(--text-muted)" id="thread-client-phone"></div>
+      </div>
+      <button class="header-action" id="thread-call-btn">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.67A2 2 0 012.18 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.18 6.18l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
+      </button>
+    </div>
+    <div id="schedule-banner-area"></div>
+    <div class="scroll-area" id="thread-messages"></div>
+    <div class="msg-input-bar">
+      <textarea class="msg-input" id="msg-input" placeholder="Message..." rows="1" oninput="autoResize(this);detectSchedule(this.value)" onkeypress="handleMsgKey(event)"></textarea>
+      <button class="send-btn" onclick="sendMessage()">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ===== NEW REPORT MODAL ===== -->
+  <div id="modal-report" class="modal-overlay" style="display:none">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <div class="modal-title">New Report</div>
+      <div id="report-form-client-info" style="margin-bottom:16px;font-size:14px;color:var(--text-muted)"></div>
+
+      <div class="toggle-row">
+        <span class="toggle-label">Salt Water Pool</span>
+        <label class="toggle"><input type="checkbox" id="toggle-salt" onchange="toggleSaltSection()"><span class="toggle-track"></span></label>
+      </div>
+
+      <div class="form-section">
+        <div class="form-section-title">Chemical Readings</div>
+        <div class="form-group">
+          <label class="form-label">Chlorine (ppm)</label>
+          <input class="form-input" type="number" id="r-chlorine" placeholder="1-3 ppm" step="0.1">
+          <div class="range-hint" id="hint-chlorine">Normal: 1–3 ppm</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">pH</label>
+          <input class="form-input" type="number" id="r-ph" placeholder="7.2-7.6" step="0.1">
+          <div class="range-hint" id="hint-ph">Normal: 7.2–7.6</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Alkalinity (ppm)</label>
+          <input class="form-input" type="number" id="r-alk" placeholder="80-120 ppm">
+          <div class="range-hint" id="hint-alk">Normal: 80–120 ppm</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Calcium Hardness (ppm)</label>
+          <input class="form-input" type="number" id="r-calcium" placeholder="200-400 ppm">
+          <div class="range-hint" id="hint-calcium">Normal: 200–400 ppm</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cyanuric Acid (ppm)</label>
+          <input class="form-input" type="number" id="r-cya" placeholder="30-50 ppm">
+          <div class="range-hint" id="hint-cya">Normal: 30–50 ppm</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Phosphates (ppb)</label>
+          <input class="form-input" type="number" id="r-phos" placeholder="0-200 ppb">
+          <div class="range-hint" id="hint-phos">Normal: 0–200 ppb</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">TDS (ppm)</label>
+          <input class="form-input" type="number" id="r-tds" placeholder="0-2000 ppm">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Water Temperature (°F)</label>
+          <input class="form-input" type="number" id="r-temp" placeholder="e.g. 82">
+        </div>
+      </div>
+
+      <div id="salt-section" class="form-section" style="display:none">
+        <div class="form-section-title">Salt System</div>
+        <div class="form-group">
+          <label class="form-label">Salt Level</label>
+          <div class="pill-group" id="salt-pill-group">
+            <button class="pill-opt" onclick="setSalt('Low')">Low</button>
+            <button class="pill-opt" onclick="setSalt('Good')">Good</button>
+            <button class="pill-opt" onclick="setSalt('High')">High</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Special Comments</label>
+        <textarea class="form-input" id="r-comments" rows="3" placeholder="Any notes, recommendations, or observations..."></textarea>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" style="flex:1" onclick="closeModal('modal-report')">Cancel</button>
+        <button class="btn btn-primary" style="flex:2" onclick="saveReport()">Save Report</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SEND REPORT MODAL ===== -->
+  <div id="modal-send" class="modal-overlay" style="display:none">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <div class="modal-title">Send Report</div>
+      <p style="font-size:14px;color:var(--text-muted);margin-bottom:20px">Choose how to send this report to your client.</p>
+      <button class="btn btn-primary btn-full" onclick="sendReportEmail()" style="margin-bottom:10px">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,12 2,6"/></svg>
+        Send via Email (Gmail)
+      </button>
+      <button class="btn btn-outline btn-full" onclick="downloadPDF()" style="margin-bottom:10px">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        Download PDF
+      </button>
+      <button class="btn btn-secondary btn-full" onclick="closeModal('modal-send')">Cancel</button>
+    </div>
+  </div>
+
+  <!-- ===== ADD CLIENT MODAL ===== -->
+  <div id="modal-add-client" class="modal-overlay" style="display:none">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <div class="modal-title" id="add-client-title">Add Client</div>
+      <div class="form-group">
+        <label class="form-label">Full Name *</label>
+        <input class="form-input" type="text" id="c-name" placeholder="e.g. Cathy Morales">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Service Address *</label>
+        <input class="form-input" type="text" id="c-address" placeholder="123 Main St, City, CA 90000">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Phone Number</label>
+        <input class="form-input" type="tel" id="c-phone" placeholder="(818) 555-0100">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <input class="form-input" type="email" id="c-email" placeholder="client@email.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Service Days</label>
+        <div id="day-checkboxes" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes</label>
+        <textarea class="form-input" id="c-notes" rows="2" placeholder="e.g. Call before arriving"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" style="flex:1" onclick="closeModal('modal-add-client')">Cancel</button>
+        <button class="btn btn-primary" style="flex:2" id="save-client-btn" onclick="saveClient()">Save Client</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SCHEDULE CONFIRM MODAL ===== -->
+  <div id="modal-schedule" class="modal-overlay" style="display:none">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <div class="modal-title">Schedule Appointment?</div>
+      <p id="schedule-detect-text" style="font-size:15px;color:var(--text);margin-bottom:20px;line-height:1.5"></p>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" style="flex:1" onclick="closeModal('modal-schedule')">Not Now</button>
+        <button class="btn btn-primary" style="flex:2" onclick="confirmSchedule()">Schedule It</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Nav -->
+  <nav class="bottom-nav">
+    <button class="nav-item active" id="nav-home" onclick="showScreen('home')">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span>Home</span>
+    </button>
+    <button class="nav-item" id="nav-route" onclick="showScreen('route')">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+      <span>Route</span>
+    </button>
+    <button class="nav-item" id="nav-clients" onclick="showScreen('clients')">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+      <span>Clients</span>
+    </button>
+    <button class="nav-item" id="nav-reports" onclick="showScreen('reports')">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      <span>Reports</span>
+    </button>
+    <button class="nav-item" id="nav-messages" onclick="showScreen('messages')">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      <span>Messages</span>
+    </button>
+  </nav>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== STATE =====
+let state = {
+  clients: [],
+  reports: [],
+  messages: {},
+  schedules: {}
+};
+
+let currentClient = null;
+let currentReport = null;
+let currentThread = null;
+let activeScreen = 'home';
+let screenStack = [];
+let editingClientId = null;
+let saltVal = '';
+let pendingSchedule = null;
+
+const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const DAY_FULL = {Mon:'Monday',Tue:'Tuesday',Wed:'Wednesday',Thu:'Thursday',Fri:'Friday',Sat:'Saturday',Sun:'Sunday'};
+
+// Chemical ranges
+const RANGES = {
+  chlorine:{min:1,max:3,unit:'ppm'},
+  ph:{min:7.2,max:7.6,unit:''},
+  alk:{min:80,max:120,unit:'ppm'},
+  calcium:{min:200,max:400,unit:'ppm'},
+  cya:{min:30,max:50,unit:'ppm'},
+  phos:{min:0,max:200,unit:'ppb'}
+};
+
+// ===== STORAGE =====
+function save(){localStorage.setItem('palab_state',JSON.stringify(state))}
+function load(){
+  const s=localStorage.getItem('palab_state');
+  if(s){state=JSON.parse(s)}
+  // seed demo data if empty
+  if(!state.clients.length){seedDemo()}
+}
+
+function seedDemo(){
+  state.clients=[
+    {id:'c1',name:'Maria Garcia',address:'1420 Sunset Blvd, Santa Clarita, CA 91321',phone:'(818) 555-0101',email:'mgarcia@email.com',days:['Mon'],notes:'Gate code: 1234',salt:false},
+    {id:'c2',name:'James Whitfield',address:'892 Palm Ave, Santa Clarita, CA 91350',phone:'(818) 555-0202',email:'jwhitfield@email.com',days:['Mon','Thu'],notes:'',salt:false},
+    {id:'c3',name:'Cathy Morales',address:'788 Harbor View Ct, Santa Clarita, CA 91355',phone:'(818) 555-0303',email:'cmorales@email.com',days:['Fri'],notes:'Call before arriving',salt:true}
+  ];
+  state.reports=[
+    {id:'r1',clientId:'c3',date:'2026-06-10',status:'sent',salt:true,saltLevel:'Good',chlorine:3,ph:7.4,alk:100,calcium:250,cya:40,phos:0,tds:500,temp:82,comments:''},
+  ];
+  state.messages={
+    c3:[
+      {id:'m1',from:'me',text:"Cathy, see you Friday afternoon!",time:'5:43 PM',ts:Date.now()-3600000},
+      {id:'m2',from:'them',text:"I'll see you Friday!",time:'6:21 PM',ts:Date.now()-1800000}
+    ]
+  };
+  save();
+}
+
+// ===== NAVIGATION =====
+function showScreen(name, push=true){
+  const mainScreens=['home','route','clients','reports','messages'];
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-'+name).classList.add('active');
+  document.querySelector('.bottom-nav').style.display = mainScreens.includes(name)?'flex':'none';
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  const nav=document.getElementById('nav-'+name);
+  if(nav) nav.classList.add('active');
+  if(push && activeScreen !== name) screenStack.push(activeScreen);
+  activeScreen = name;
+  // render
+  if(name==='home') renderHome();
+  if(name==='route') renderRoute();
+  if(name==='clients') renderClients();
+  if(name==='reports') renderReports();
+  if(name==='messages') renderMessagesList();
+}
+
+function goBack(){
+  const prev = screenStack.pop() || 'home';
+  showScreen(prev, false);
+}
+
+// ===== HOME =====
+function renderHome(){
+  const now=new Date();
+  const opts={weekday:'long',month:'long',day:'numeric'};
+  document.getElementById('home-date').textContent=now.toLocaleDateString('en-US',opts);
+  const dayName=DAYS[now.getDay()===0?6:now.getDay()-1];
+  const todayClients=state.clients.filter(c=>c.days&&c.days.includes(dayName));
+  const doneReports=state.reports.filter(r=>{
+    const rd=new Date(r.date); const td=new Date();
+    return rd.toDateString()===td.toDateString() && todayClients.find(c=>c.id===r.clientId);
+  });
+  const total=todayClients.length,done=doneReports.length;
+  document.getElementById('route-progress-text').textContent=`${done}/${total} done`;
+  document.getElementById('route-progress-bar').style.width=total>0?`${(done/total)*100}%`:'0%';
+
+  // Upcoming = today's unfinished + next few days
+  const upcoming=[];
+  todayClients.forEach(c=>{
+    const rep=state.reports.find(r=>r.clientId===c.id&&r.date===now.toISOString().split('T')[0]);
+    if(!rep) upcoming.push({client:c,day:dayName,today:true});
+  });
+  // Add next 7 days
+  for(let i=1;i<=7&&upcoming.length<5;i++){
+    const d=new Date(now); d.setDate(d.getDate()+i);
+    const dn=DAYS[d.getDay()===0?6:d.getDay()-1];
+    state.clients.filter(c=>c.days&&c.days.includes(dn)).forEach(c=>{
+      if(upcoming.length<5) upcoming.push({client:c,day:dn,date:d,today:false});
+    });
+  }
+
+  const ul=document.getElementById('upcoming-list');
+  if(!upcoming.length){ul.innerHTML=`<div class="empty"><div class="empty-icon">${svgMap()}</div><h3>No stops scheduled</h3><p>Add clients with service days to build your route</p></div>`;return;}
+  ul.innerHTML=upcoming.map(u=>{
+    const label=u.today?`Today`:`${u.day}, ${u.date?u.date.toLocaleDateString('en-US',{month:'short',day:'numeric'}):''}`;
+    return `<div class="upcoming-item" onclick="openClientDetail('${u.client.id}')">
+      <div class="upcoming-left-bar"></div>
+      <div class="upcoming-info">
+        <div class="upcoming-name">Visit ${u.client.name}</div>
+        <div class="upcoming-time">${label}</div>
+      </div>
+      <div class="chevron">${svgChevron()}</div>
+    </div>`;
+  }).join('');
+}
+
+// ===== ROUTE =====
+let selectedDay=null;
+function renderRoute(){
+  const now=new Date();
+  const todayIdx=now.getDay()===0?6:now.getDay()-1;
+  if(selectedDay===null) selectedDay=DAYS[todayIdx];
+
+  // Day selector
+  const ds=document.getElementById('day-selector');
+  ds.innerHTML=DAYS.map(d=>`<button class="day-btn${d===selectedDay?' active':''}" onclick="selectDay('${d}')">${d}</button>`).join('');
+
+  renderRouteDay();
+}
+
+function selectDay(d){selectedDay=d;renderRoute()}
+
+function renderRouteDay(){
+  const clients=state.clients.filter(c=>c.days&&c.days.includes(selectedDay));
+  const rl=document.getElementById('route-list');
+  if(!clients.length){
+    rl.innerHTML=`<div class="empty"><div class="empty-icon">${svgMap()}</div><h3>No stops for ${selectedDay}</h3><p>Add clients with this service day to build your route</p></div>`;return;
+  }
+  rl.innerHTML=clients.map((c,i)=>`
+    <div class="stop-item">
+      <div class="stop-num">${i+1}</div>
+      <div class="stop-info" onclick="openClientDetail('${c.id}')">
+        <div class="stop-name">${c.name}</div>
+        <div class="stop-addr">${c.address}</div>
+      </div>
+      <button class="report-btn" onclick="openNewReport('${c.id}')">Report</button>
+      <div class="chevron" style="margin-left:8px;cursor:pointer" onclick="openClientDetail('${c.id}')">${svgChevron()}</div>
+    </div>`).join('');
+}
+
+// ===== CLIENTS =====
+function renderClients(){
+  const cl=document.getElementById('clients-list');
+  if(!state.clients.length){cl.innerHTML=`<div class="empty"><div class="empty-icon">${svgPeople()}</div><h3>No clients yet</h3><p>Tap + to add your first client</p></div>`;return;}
+  const sorted=[...state.clients].sort((a,b)=>a.name.localeCompare(b.name));
+  cl.innerHTML=sorted.map(c=>`
+    <div class="list-item" onclick="openClientDetail('${c.id}')">
+      <div class="item-avatar">${initials(c.name)}</div>
+      <div class="item-info">
+        <div class="item-name">${c.name}</div>
+        <div class="item-sub">${c.address}</div>
+        <div class="item-meta">${(c.days||[]).map(d=>`<span class="meta-pill">${d}</span>`).join('')}${c.salt?'<span class="meta-pill" style="background:#E3F2FD;color:#0277BD">Salt</span>':''}</div>
+      </div>
+      <div class="chevron">${svgChevron()}</div>
+    </div>`).join('');
+}
+
+// ===== CLIENT DETAIL =====
+function openClientDetail(clientId){
+  currentClient=state.clients.find(c=>c.id===clientId);
+  if(!currentClient) return;
+  const clientReports=state.reports.filter(r=>r.clientId===clientId).sort((a,b)=>b.date.localeCompare(a.date));
+  const body=document.getElementById('client-detail-body');
+  body.innerHTML=`
+    <div class="profile-header">
+      <div class="profile-avatar">${initials(currentClient.name)}</div>
+      <div class="profile-name">${currentClient.name}</div>
+      <div class="profile-day">${(currentClient.days||[]).map(d=>DAY_FULL[d]).join(', ')} service</div>
+    </div>
+    <div class="action-buttons">
+      <button class="action-btn" onclick="callClient()">
+        ${svgPhone()}<span>Call</span>
+      </button>
+      <button class="action-btn" onclick="openThread('${clientId}')">
+        ${svgMsg()}<span>Message</span>
+      </button>
+      <button class="action-btn primary" onclick="openNewReport('${clientId}')">
+        ${svgReport()}<span>Report</span>
+      </button>
+    </div>
+    <div class="info-section">
+      <div class="info-section-title">Contact Info</div>
+      <div class="card">
+        <div style="padding:0 16px">
+          <div class="info-row">${svgPin()}<span class="info-val">${currentClient.address}</span></div>
+          ${currentClient.phone?`<div class="info-row">${svgPhoneSmall()}<span class="info-val">${currentClient.phone}</span></div>`:''}
+          ${currentClient.email?`<div class="info-row">${svgMailSmall()}<span class="info-val">${currentClient.email}</span></div>`:''}
+          ${currentClient.notes?`<div style="padding:10px 0;border-top:1px solid var(--gray-100)"><div class="info-section-title">Notes</div><div class="notes-text">${currentClient.notes}</div></div>`:''}
+        </div>
+      </div>
+    </div>
+    <div class="info-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="info-section-title">Reports (${clientReports.length})</div>
+        <button class="btn btn-sm btn-primary" onclick="openNewReport('${clientId}')">+ New</button>
+      </div>
+      ${clientReports.length?clientReports.map(r=>`
+        <div class="card" style="margin-bottom:10px;cursor:pointer" onclick="openReportDetail('${r.id}')">
+          <div style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between">
+            <div>
+              <div style="font-size:14px;font-weight:600;color:var(--text)">${formatDate(r.date)}</div>
+              <div style="margin-top:4px"><span class="badge badge-${r.status}">${r.status==='sent'?'✓ Sent via email':'Draft'}</span></div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              ${r.chlorine!==undefined?`<span class="meta-pill">Cl ${r.chlorine}</span>`:''}
+              ${r.ph!==undefined?`<span class="meta-pill">pH ${r.ph}</span>`:''}
+              <div class="chevron">${svgChevron()}</div>
+            </div>
+          </div>
+        </div>`).join(''):`<div style="text-align:center;color:var(--text-muted);padding:20px;font-size:14px">No reports yet</div>`}
+    </div>
+    <div style="padding:0 20px 30px">
+      <button class="btn btn-danger btn-full" onclick="deleteClient('${clientId}')">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+        Delete Client
+      </button>
+    </div>`;
+  showScreen('client-detail');
+}
+
+function callClient(){if(currentClient&&currentClient.phone) window.location.href='tel:'+currentClient.phone.replace(/\D/g,'')}
+
+function deleteClient(id){
+  if(!confirm('Delete this client? Their reports will also be removed.')) return;
+  state.clients=state.clients.filter(c=>c.id!==id);
+  state.reports=state.reports.filter(r=>r.clientId!==id);
+  save(); goBack(); renderClients(); showToast('Client deleted');
+}
+
+// ===== ADD / EDIT CLIENT =====
+function openAddClient(){
+  editingClientId=null;
+  document.getElementById('add-client-title').textContent='Add Client';
+  document.getElementById('save-client-btn').textContent='Save Client';
+  document.getElementById('c-name').value='';
+  document.getElementById('c-address').value='';
+  document.getElementById('c-phone').value='';
+  document.getElementById('c-email').value='';
+  document.getElementById('c-notes').value='';
+  renderDayCheckboxes([]);
+  openModal('modal-add-client');
+}
+
+function openEditClient(){
+  if(!currentClient) return;
+  editingClientId=currentClient.id;
+  document.getElementById('add-client-title').textContent='Edit Client';
+  document.getElementById('save-client-btn').textContent='Save Changes';
+  document.getElementById('c-name').value=currentClient.name;
+  document.getElementById('c-address').value=currentClient.address;
+  document.getElementById('c-phone').value=currentClient.phone||'';
+  document.getElementById('c-email').value=currentClient.email||'';
+  document.getElementById('c-notes').value=currentClient.notes||'';
+  renderDayCheckboxes(currentClient.days||[]);
+  openModal('modal-add-client');
+}
+
+function renderDayCheckboxes(selected){
+  document.getElementById('day-checkboxes').innerHTML=DAYS.map(d=>`
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 12px;border:1.5px solid ${selected.includes(d)?'var(--blue)':'var(--gray-300)'};border-radius:20px;font-size:13px;font-weight:600;color:${selected.includes(d)?'var(--blue)':'var(--text-muted)'}">
+      <input type="checkbox" name="days" value="${d}" ${selected.includes(d)?'checked':''} style="display:none" onchange="updateDayStyle(this)">
+      ${d}
+    </label>`).join('');
+}
+
+function updateDayStyle(cb){
+  const lbl=cb.closest('label');
+  lbl.style.borderColor=cb.checked?'var(--blue)':'var(--gray-300)';
+  lbl.style.color=cb.checked?'var(--blue)':'var(--text-muted)';
+}
+
+function saveClient(){
+  const name=document.getElementById('c-name').value.trim();
+  const address=document.getElementById('c-address').value.trim();
+  if(!name||!address){showToast('Name and address are required');return;}
+  const days=[...document.querySelectorAll('#day-checkboxes input:checked')].map(cb=>cb.value);
+  const client={
+    id:editingClientId||'c'+Date.now(),
+    name,address,
+    phone:document.getElementById('c-phone').value.trim(),
+    email:document.getElementById('c-email').value.trim(),
+    notes:document.getElementById('c-notes').value.trim(),
+    days,salt:false
+  };
+  if(editingClientId){
+    const idx=state.clients.findIndex(c=>c.id===editingClientId);
+    if(idx>-1){const existing=state.clients[idx];client.salt=existing.salt;state.clients[idx]=client;}
+  } else {
+    state.clients.push(client);
+  }
+  save();closeModal('modal-add-client');
+  if(editingClientId){currentClient=client;openClientDetail(client.id);}
+  else{renderClients();}
+  showToast(editingClientId?'Client updated':'Client added');
+  editingClientId=null;
+}
+
+// ===== REPORTS LIST =====
+function renderReports(){
+  const rl=document.getElementById('reports-list');
+  if(!state.reports.length){rl.innerHTML=`<div class="empty"><div class="empty-icon">${svgReportLg()}</div><h3>No reports yet</h3><p>Reports will appear here after you create them</p></div>`;return;}
+  const sorted=[...state.reports].sort((a,b)=>b.date.localeCompare(a.date));
+  rl.innerHTML=sorted.map(r=>{
+    const client=state.clients.find(c=>c.id===r.clientId)||{name:'Unknown'};
+    return `<div class="list-item" onclick="openReportDetail('${r.id}')">
+      <div class="item-avatar">${initials(client.name)}</div>
+      <div class="item-info">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="item-name">${client.name}</span>
+          <span class="badge badge-${r.status}">${r.status==='sent'?'✓ Sent':'Draft'}</span>
+        </div>
+        <div class="item-sub">${formatDate(r.date)}</div>
+        <div class="item-meta">
+          ${r.chlorine!==undefined?`<span class="meta-pill">Cl ${r.chlorine}</span>`:''}
+          ${r.ph!==undefined?`<span class="meta-pill">pH ${r.ph}</span>`:''}
+          ${r.alk!==undefined?`<span class="meta-pill">Alk ${r.alk}</span>`:''}
+        </div>
+      </div>
+      <div class="chevron">${svgChevron()}</div>
+    </div>`;}).join('');
+}
+
+// ===== REPORT DETAIL =====
+function openReportDetail(reportId){
+  currentReport=state.reports.find(r=>r.id===reportId);
+  if(!currentReport) return;
+  const client=state.clients.find(c=>c.id===currentReport.clientId)||{name:'Unknown',address:'',phone:''};
+  const body=document.getElementById('report-detail-body');
+
+  const saltHTML=currentReport.salt?`
+    <div class="report-section">
+      <div class="report-section-title">Salt System</div>
+      <div class="report-section-body">
+        <div class="reading-row"><span class="reading-name">Salt Level</span><span class="reading-val ${saltColor(currentReport.saltLevel)}">${currentReport.saltLevel||'—'}</span></div>
+      </div>
+    </div>`:'';
+
+  const chemRows=[
+    {label:'Chlorine',val:currentReport.chlorine,unit:'ppm',key:'chlorine'},
+    {label:'pH',val:currentReport.ph,unit:'',key:'ph'},
+    {label:'Alkalinity',val:currentReport.alk,unit:'ppm',key:'alk'},
+    {label:'Calcium Hardness',val:currentReport.calcium,unit:'ppm',key:'calcium'},
+    {label:'Cyanuric Acid',val:currentReport.cya,unit:'ppm',key:'cya'},
+    {label:'Phosphates',val:currentReport.phos,unit:'ppb',key:'phos'},
+    {label:'TDS',val:currentReport.tds,unit:'ppm',key:'tds'},
+    {label:'Water Temperature',val:currentReport.temp,unit:'°F',key:'temp'},
+  ].filter(r=>r.val!==undefined&&r.val!=='');
+
+  body.innerHTML=`
+    <div class="report-header-card">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between">
+        <div>
+          <div class="report-client-name">${client.name}</div>
+          <div class="report-client-sub">${client.address}</div>
+          ${client.phone?`<div class="report-client-sub">${client.phone}</div>`:''}
+          <div class="report-date">${formatDate(currentReport.date)}</div>
+        </div>
+        <span class="badge badge-${currentReport.status}" style="margin-top:4px">${currentReport.status==='sent'?'✓ Sent':'Draft'}</span>
+      </div>
+    </div>
+    <div class="report-section">
+      <div class="report-section-title">Chemical Readings</div>
+      <div class="report-section-body">
+        ${chemRows.map(r=>`<div class="reading-row"><span class="reading-name">${r.label}</span><span class="reading-val">${r.val}${r.unit?' '+r.unit:''}</span></div>`).join('')}
+      </div>
+    </div>
+    ${saltHTML}
+    ${currentReport.comments?`<div class="report-section"><div class="report-section-title">Comments</div><div class="report-section-body"><p style="font-size:14px;color:var(--text);line-height:1.5">${currentReport.comments}</p></div></div>`:''}
+    <div style="padding:20px;display:flex;flex-direction:column;gap:10px">
+      ${currentReport.status==='sent'?
+        `<button class="btn btn-outline btn-full" onclick="downloadPDF()">Download PDF</button>
+         <button class="btn btn-primary btn-full" onclick="openNewReport('${client.id}')">New Report for ${client.name}</button>`:
+        `<button class="btn btn-primary btn-full" onclick="openSendModal()">Send Report</button>`}
+    </div>`;
+  showScreen('report-detail');
+}
+
+// ===== NEW REPORT FORM =====
+function openNewReport(clientId){
+  currentClient=state.clients.find(c=>c.id===clientId);
+  if(!currentClient) return;
+  document.getElementById('report-form-client-info').textContent=`${currentClient.name} — ${currentClient.address}`;
+  document.getElementById('toggle-salt').checked=currentClient.salt||false;
+  document.getElementById('salt-section').style.display=currentClient.salt?'block':'none';
+  // Clear fields
+  ['r-chlorine','r-ph','r-alk','r-calcium','r-cya','r-phos','r-tds','r-temp','r-comments'].forEach(id=>{document.getElementById(id).value=''});
+  saltVal='';
+  document.querySelectorAll('.pill-opt').forEach(p=>{p.className='pill-opt'});
+  openModal('modal-report');
+}
+
+function toggleSaltSection(){
+  document.getElementById('salt-section').style.display=document.getElementById('toggle-salt').checked?'block':'none';
+}
+
+function setSalt(v){
+  saltVal=v;
+  document.querySelectorAll('.pill-opt').forEach(p=>{
+    p.className='pill-opt'+(p.textContent===v?' active-'+v.toLowerCase():'');
+  });
+}
+
+function saveReport(){
+  const client=currentClient;
+  if(!client){closeModal('modal-report');return;}
+  const isSalt=document.getElementById('toggle-salt').checked;
+  const report={
+    id:'r'+Date.now(),
+    clientId:client.id,
+    date:new Date().toISOString().split('T')[0],
+    status:'draft',
+    salt:isSalt,
+    saltLevel:isSalt?saltVal:'',
+    chlorine:parseFloat(document.getElementById('r-chlorine').value)||undefined,
+    ph:parseFloat(document.getElementById('r-ph').value)||undefined,
+    alk:parseFloat(document.getElementById('r-alk').value)||undefined,
+    calcium:parseFloat(document.getElementById('r-calcium').value)||undefined,
+    cya:parseFloat(document.getElementById('r-cya').value)||undefined,
+    phos:parseFloat(document.getElementById('r-phos').value)||undefined,
+    tds:parseFloat(document.getElementById('r-tds').value)||undefined,
+    temp:parseFloat(document.getElementById('r-temp').value)||undefined,
+    comments:document.getElementById('r-comments').value.trim()
+  };
+  // Update client salt preference
+  const ci=state.clients.findIndex(c=>c.id===client.id);
+  if(ci>-1) state.clients[ci].salt=isSalt;
+  state.reports.push(report);
+  save();
+  currentReport=report;
+  closeModal('modal-report');
+  openSendModal();
+}
+
+function openSendModal(){openModal('modal-send')}
+
+function sendReportEmail(){
+  if(!currentReport) return;
+  const client=state.clients.find(c=>c.id===currentReport.clientId);
+  if(!client){showToast('Client not found');return;}
+  if(!client.email){showToast('No email on file for this client');closeModal('modal-send');return;}
+  // Build mailto
+  const sub='GK Swimming Pools - Pool Report';
+  const body=buildEmailBody(client,currentReport);
+  window.location.href=`mailto:${client.email}?subject=${encodeURIComponent(sub)}&body=${encodeURIComponent(body)}`;
+  // Mark as sent
+  const idx=state.reports.findIndex(r=>r.id===currentReport.id);
+  if(idx>-1){state.reports[idx].status='sent';currentReport.status='sent';}
+  save();
+  closeModal('modal-send');
+  showToast('Report sent via email ✓');
+  renderReports();
+}
+
+function buildEmailBody(client,report){
+  let body=`Hi ${client.name.split(' ')[0]},\n\nHere is today's report for the pool at ${client.address}.\n\n`;
+  body+=`— CHEMICAL READINGS —\n`;
+  if(report.chlorine!==undefined) body+=`Chlorine: ${report.chlorine} ppm\n`;
+  if(report.ph!==undefined) body+=`pH: ${report.ph}\n`;
+  if(report.alk!==undefined) body+=`Alkalinity: ${report.alk} ppm\n`;
+  if(report.calcium!==undefined) body+=`Calcium Hardness: ${report.calcium} ppm\n`;
+  if(report.cya!==undefined) body+=`Cyanuric Acid: ${report.cya} ppm\n`;
+  if(report.phos!==undefined) body+=`Phosphates: ${report.phos} ppb\n`;
+  if(report.tds!==undefined) body+=`TDS: ${report.tds} ppm\n`;
+  if(report.temp!==undefined) body+=`Water Temperature: ${report.temp}°F\n`;
+  if(report.salt&&report.saltLevel) body+=`\n— SALT SYSTEM —\nSalt Level: ${report.saltLevel}\n`;
+  if(report.comments) body+=`\n— COMMENTS —\n${report.comments}\n`;
+  body+=`\nIf you have any questions, feel free to call or text us at 818-804-8204\n\nThank you,\nTariq\nGK Swimming Pools`;
+  return body;
+}
+
+// ===== PDF GENERATION =====
+function downloadPDF(){
+  const report=currentReport;
+  if(!report){closeModal('modal-send');return;}
+  const client=state.clients.find(c=>c.id===report.clientId)||{name:'Unknown',address:'',phone:''};
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:'pt',format:'letter'});
+  const W=612,margin=48;
+  let y=margin;
+
+  // Header bg
+  doc.setFillColor(21,101,192);
+  doc.rect(0,0,W,80,'F');
+
+  // Logo placeholder text (white)
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(22);doc.setFont('helvetica','bold');
+  doc.text('GK Swimming Pools',margin,50);
+  doc.setFontSize(10);doc.setFont('helvetica','normal');
+  doc.text('818-804-8204',margin,65);
+
+  // Report label top right
+  doc.setFontSize(11);doc.setFont('helvetica','bold');
+  doc.text('POOL SERVICE REPORT',W-margin,35,{align:'right'});
+  doc.setFont('helvetica','normal');doc.setFontSize(9);
+  doc.text(formatDate(report.date),W-margin,50,{align:'right'});
+
+  y=100;
+  // Client info box
+  doc.setFillColor(243,246,253);doc.roundedRect(margin,y,W-2*margin,70,4,4,'F');
+  doc.setTextColor(26,26,46);doc.setFontSize(14);doc.setFont('helvetica','bold');
+  doc.text(client.name,margin+14,y+22);
+  doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(107,114,128);
+  doc.text(client.address,margin+14,y+38);
+  if(client.phone) doc.text(client.phone,margin+14,y+52);
+  // Status badge
+  const sentColor=report.status==='sent'?[46,125,50]:[158,158,158];
+  doc.setFillColor(...sentColor);doc.roundedRect(W-margin-80,y+14,80,24,4,4,'F');
+  doc.setTextColor(255,255,255);doc.setFontSize(9);doc.setFont('helvetica','bold');
+  doc.text(report.status==='sent'?'SENT':'DRAFT',W-margin-40,y+30,{align:'center'});
+
+  y+=90;
+  // Chemical Readings section
+  doc.setTextColor(107,114,128);doc.setFontSize(9);doc.setFont('helvetica','bold');
+  doc.text('CHEMICAL READINGS',margin,y);
+  y+=8;doc.setDrawColor(224,224,224);doc.setLineWidth(.5);doc.line(margin,y,W-margin,y);y+=12;
+
+  const chems=[
+    {label:'Chlorine',val:report.chlorine,unit:'ppm'},
+    {label:'pH',val:report.ph,unit:''},
+    {label:'Alkalinity',val:report.alk,unit:'ppm'},
+    {label:'Calcium Hardness',val:report.calcium,unit:'ppm'},
+    {label:'Cyanuric Acid',val:report.cya,unit:'ppm'},
+    {label:'Phosphates',val:report.phos,unit:'ppb'},
+    {label:'TDS',val:report.tds,unit:'ppm'},
+    {label:'Water Temperature',val:report.temp,unit:'°F'},
+  ].filter(c=>c.val!==undefined&&c.val!=='');
+
+  chems.forEach((c,i)=>{
+    if(i%2===0) doc.setFillColor(249,250,251); else doc.setFillColor(255,255,255);
+    doc.rect(margin,y-10,W-2*margin,22,'F');
+    doc.setTextColor(100,110,130);doc.setFontSize(10);doc.setFont('helvetica','normal');
+    doc.text(c.label,margin+10,y+4);
+    doc.setTextColor(26,26,46);doc.setFont('helvetica','bold');
+    doc.text(`${c.val}${c.unit?' '+c.unit:''}`,W-margin-10,y+4,{align:'right'});
+    doc.setDrawColor(240,240,240);doc.setLineWidth(.3);doc.line(margin,y+12,W-margin,y+12);
+    y+=22;
+  });
+
+  if(report.salt&&report.saltLevel){
+    y+=12;
+    doc.setTextColor(107,114,128);doc.setFontSize(9);doc.setFont('helvetica','bold');
+    doc.text('SALT SYSTEM',margin,y);
+    y+=8;doc.setDrawColor(224,224,224);doc.setLineWidth(.5);doc.line(margin,y,W-margin,y);y+=12;
+    doc.setFillColor(249,250,251);doc.rect(margin,y-10,W-2*margin,22,'F');
+    doc.setTextColor(100,110,130);doc.setFontSize(10);doc.setFont('helvetica','normal');
+    doc.text('Salt Level',margin+10,y+4);
+    const sc=report.saltLevel==='Good'?[46,125,50]:report.saltLevel==='Low'?[230,81,0]:[198,40,40];
+    doc.setTextColor(...sc);doc.setFont('helvetica','bold');
+    doc.text(report.saltLevel,W-margin-10,y+4,{align:'right'});
+    y+=22;
+  }
+
+  if(report.comments){
+    y+=12;
+    doc.setTextColor(107,114,128);doc.setFontSize(9);doc.setFont('helvetica','bold');
+    doc.text('COMMENTS',margin,y);y+=8;
+    doc.setDrawColor(224,224,224);doc.line(margin,y,W-margin,y);y+=12;
+    doc.setTextColor(26,26,46);doc.setFontSize(10);doc.setFont('helvetica','normal');
+    const lines=doc.splitTextToSize(report.comments,W-2*margin-20);
+    doc.text(lines,margin+10,y);y+=lines.length*14+10;
+  }
+
+  // Footer
+  const footY=740;
+  doc.setFillColor(243,246,253);doc.rect(0,footY,W,72,'F');
+  doc.setTextColor(107,114,128);doc.setFontSize(9);doc.setFont('helvetica','normal');
+  doc.text('GK Swimming Pools  •  818-804-8204  •  Santa Clarita, CA',W/2,footY+22,{align:'center'});
+  doc.text('Thank you for your business!',W/2,footY+40,{align:'center'});
+
+  doc.save(`GK_Pool_Report_${client.name.replace(/\s+/g,'_')}_${report.date}.pdf`);
+  closeModal('modal-send');
+  showToast('PDF downloaded');
+}
+
+// ===== MESSAGES =====
+function renderMessagesList(){
+  const ml=document.getElementById('messages-list');
+  const threads=Object.keys(state.messages);
+  if(!threads.length){
+    // Show all clients you can message
+    if(!state.clients.length){ml.innerHTML=`<div class="empty">${svgMsgLg()}<h3>No messages</h3><p>Messages with clients will appear here</p></div>`;return;}
+    ml.innerHTML=state.clients.map(c=>`
+      <div class="list-item" onclick="openThread('${c.id}')">
+        <div class="item-avatar">${initials(c.name)}</div>
+        <div class="item-info">
+          <div class="item-name">${c.name}</div>
+          <div class="item-sub">Start a conversation</div>
+        </div>
+        <div class="chevron">${svgChevron()}</div>
+      </div>`).join('');
+    return;
+  }
+  // Show clients with message threads + others
+  const allClients=state.clients;
+  ml.innerHTML=allClients.map(c=>{
+    const msgs=state.messages[c.id]||[];
+    const last=msgs[msgs.length-1];
+    return `<div class="list-item" onclick="openThread('${c.id}')">
+      <div class="item-avatar">${initials(c.name)}</div>
+      <div class="item-info">
+        <div class="item-name">${c.name}</div>
+        <div class="item-sub">${last?last.text:'No messages yet'}</div>
+      </div>
+      ${last?`<div style="font-size:11px;color:var(--text-muted)">${last.time}</div>`:''}
+    </div>`;}).join('');
+}
+
+let detectCooldown=false;
+function openThread(clientId){
+  currentThread=state.clients.find(c=>c.id===clientId);
+  if(!currentThread) return;
+  document.getElementById('thread-client-name').textContent=currentThread.name;
+  document.getElementById('thread-client-phone').textContent=currentThread.phone||'';
+  document.getElementById('thread-call-btn').onclick=()=>{if(currentThread.phone)window.location.href='tel:'+currentThread.phone.replace(/\D/g,'')};
+  renderThread();
+  document.getElementById('schedule-banner-area').innerHTML='';
+  document.getElementById('msg-input').value='';
+  showScreen('msg-thread');
+  setTimeout(()=>{const sa=document.getElementById('thread-messages');sa.scrollTop=sa.scrollHeight;},100);
+}
+
+function renderThread(){
+  if(!currentThread) return;
+  const msgs=state.messages[currentThread.id]||[];
+  const tm=document.getElementById('thread-messages');
+  if(!msgs.length){tm.innerHTML=`<div class="empty"><p>No messages yet. Say hello!</p></div>`;return;}
+  tm.innerHTML=`<div class="msg-thread">${msgs.map(m=>`
+    <div class="bubble-wrap ${m.from==='me'?'sent':'recv'}">
+      <div class="bubble ${m.from==='me'?'sent':'recv'}">${m.text}</div>
+      <div class="bubble-time">${m.time}</div>
+    </div>`).join('')}</div>`;
+  setTimeout(()=>{tm.scrollTop=tm.scrollHeight;},50);
+}
+
+function autoResize(ta){ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,100)+'px'}
+
+function handleMsgKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}}
+
+function sendMessage(){
+  const input=document.getElementById('msg-input');
+  const text=input.value.trim();
+  if(!text||!currentThread) return;
+  const now=new Date();
+  const time=now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+  if(!state.messages[currentThread.id]) state.messages[currentThread.id]=[];
+  state.messages[currentThread.id].push({id:'m'+Date.now(),from:'me',text,time,ts:Date.now()});
+  save();
+  input.value='';input.style.height='auto';
+  document.getElementById('schedule-banner-area').innerHTML='';
+  renderThread();
+}
+
+// Schedule detection
+const scheduleRegex=/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun|tomorrow|today)\b/i;
+const timeRegex=/\b(\d{1,2}(?::\d{2})?\s*(?:am|pm))\b/i;
+
+function detectSchedule(text){
+  if(!text||detectCooldown) return;
+  const dayMatch=text.match(scheduleRegex);
+  if(!dayMatch) return;
+  detectCooldown=true;
+  setTimeout(()=>{detectCooldown=false;},3000);
+  const timeMatch=text.match(timeRegex);
+  const day=dayMatch[0];
+  const time=timeMatch?timeMatch[0]:'starting at 7:30 AM';
+  const banner=document.getElementById('schedule-banner-area');
+  pendingSchedule={day,time,clientId:currentThread.id,originalText:text};
+  banner.innerHTML=`
+    <div class="schedule-banner" onclick="openScheduleModal()">
+      <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:var(--blue);flex-shrink:0"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <span class="schedule-banner-text">Schedule visit for ${currentThread.name} on ${day} ${timeMatch?'at '+time:''}?</span>
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>`;
+}
+
+function openScheduleModal(){
+  if(!pendingSchedule) return;
+  const c=state.clients.find(c=>c.id===pendingSchedule.clientId);
+  document.getElementById('schedule-detect-text').textContent=
+    `Add a visit to ${c?c.name:'client'} on ${pendingSchedule.day}${pendingSchedule.time&&pendingSchedule.time!=='starting at 7:30 AM'?' at '+pendingSchedule.time:''}?\n\nThis will add it to the ${pendingSchedule.day} route${!pendingSchedule.time.includes('7:30')?'':' starting at 7:30 AM'}.`;
+  openModal('modal-schedule');
+}
+
+function confirmSchedule(){
+  if(!pendingSchedule) return;
+  const c=state.clients.find(c=>c.id===pendingSchedule.clientId);
+  if(c){
+    const dayMap={monday:'Mon',tuesday:'Tue',wednesday:'Wed',thursday:'Thu',friday:'Fri',saturday:'Sat',sunday:'Sun',mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat',sun:'Sun'};
+    const dayKey=dayMap[pendingSchedule.day.toLowerCase()];
+    if(dayKey&&!c.days.includes(dayKey)){
+      const ci=state.clients.findIndex(cl=>cl.id===c.id);
+      state.clients[ci].days=[...(state.clients[ci].days||[]),dayKey];
+      save();
+    }
+  }
+  closeModal('modal-schedule');
+  document.getElementById('schedule-banner-area').innerHTML='';
+  pendingSchedule=null;
+  showToast('Visit scheduled ✓');
+}
+
+// ===== HELPERS =====
+function initials(name){return name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2)}
+function formatDate(d){return new Date(d+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric',year:'numeric'})}
+function saltColor(v){return v==='Low'?'low':v==='Good'?'good':v==='High'?'high':''}
+
+function openModal(id){document.getElementById(id).style.display='flex'}
+function closeModal(id){document.getElementById(id).style.display='none'}
+
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+// Input range hints
+['chlorine','ph','alk','calcium','cya','phos'].forEach(key=>{
+  const input=document.getElementById('r-'+key);
+  const hint=document.getElementById('hint-'+key);
+  if(!input||!hint) return;
+  const r=RANGES[key];
+  input.addEventListener('input',()=>{
+    const v=parseFloat(input.value);
+    if(isNaN(v)){hint.className='range-hint';hint.textContent=`Normal: ${r.min}–${r.max} ${r.unit}`;return;}
+    if(v<r.min){hint.className='range-hint warn';hint.textContent=`⚠ Below normal (${r.min}–${r.max} ${r.unit})`;}
+    else if(v>r.max){hint.className='range-hint bad';hint.textContent=`⚠ Above normal (${r.min}–${r.max} ${r.unit})`;}
+    else{hint.className='range-hint ok';hint.textContent=`✓ Within normal range`;}
+  });
+});
+
+// ===== SVG ICONS =====
+function svgChevron(){return `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>`}
+function svgMap(){return `<svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>`}
+function svgPeople(){return `<svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>`}
+function svgReportLg(){return `<svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`}
+function svgMsgLg(){return `<svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>`}
+function svgPhone(){return `<svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.67A2 2 0 012.18 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.18 6.18l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>`}
+function svgMsg(){return `<svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>`}
+function svgReport(){return `<svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`}
+function svgPin(){return `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>`}
+function svgPhoneSmall(){return `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.67A2 2 0 012.18 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.18 6.18l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>`}
+function svgMailSmall(){return `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,12 2,6"/></svg>`}
+
+// ===== INIT =====
+load();
+renderHome();
+</script>
+</body>
+</html>
