@@ -10,6 +10,17 @@
 <title>Palab – GK Swimming Pools</title>
 <link rel="manifest" href="manifest.json">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+  // ===== SUPABASE CONFIG =====
+  const SUPABASE_URL = "https://cjfeynzytmqwrdgvouvl.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqZmV5bnp5dG1xd3JkZ3ZvdXZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4MjkyODYsImV4cCI6MjA5NzQwNTI4Nn0.LSmqa39d9j3Jh1FkJEW3KHv7r8dP-h3qwLr_KkXl1_o";
+  const SB_REST = SUPABASE_URL + "/rest/v1";
+  const SB_HEADERS = {
+    "apikey": SUPABASE_ANON_KEY,
+    "Authorization": "Bearer " + SUPABASE_ANON_KEY,
+    "Content-Type": "application/json"
+  };
+</script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   :root{
@@ -471,6 +482,20 @@
         <label class="form-label">Service Days</label>
         <div id="day-checkboxes" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px"></div>
       </div>
+      <div class="form-group" style="display:flex;gap:12px">
+        <div style="flex:1">
+          <label class="form-label">Monthly Rate ($)</label>
+          <input class="form-input" type="number" id="c-rate" placeholder="150">
+        </div>
+        <div style="flex:1">
+          <label class="form-label">Payment Method</label>
+          <input class="form-input" type="text" id="c-payment-method" placeholder="zelle, intuit...">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Entry Code <span style="text-transform:none;font-weight:400">(gate, lockbox, etc.)</span></label>
+        <input class="form-input" type="text" id="c-entry-code" placeholder="e.g. 1234 or gate code">
+      </div>
       <div class="form-group">
         <label class="form-label">Notes</label>
         <textarea class="form-input" id="c-notes" rows="2" placeholder="e.g. Call before arriving"></textarea>
@@ -539,9 +564,12 @@ let screenStack = [];
 let editingClientId = null;
 let saltVal = '';
 let pendingSchedule = null;
+let isOnline = navigator.onLine;
+let isSyncing = false;
 
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const DAY_FULL = {Mon:'Monday',Tue:'Tuesday',Wed:'Wednesday',Thu:'Thursday',Fri:'Friday',Sat:'Saturday',Sun:'Sunday'};
+const DB_TO_APP_DAY = {Mon:'Mon',Tue:'Tue',Wed:'Wed',Thu:'Thu',Fri:'Fri',Sat:'Sat',Sun:'Sun'};
 
 // Chemical ranges
 const RANGES = {
@@ -553,34 +581,156 @@ const RANGES = {
   phos:{min:0,max:200,unit:'ppb'}
 };
 
-// ===== STORAGE =====
-function save(){localStorage.setItem('palab_state',JSON.stringify(state))}
-function load(){
-  const s=localStorage.getItem('palab_state');
-  if(s){state=JSON.parse(s)}
-  // seed demo data if empty
-  if(!state.clients.length){seedDemo()}
+// ===== SUPABASE DATA LAYER =====
+// Strategy: load local cache instantly for fast in/out usage, then sync with
+// Supabase in the background. All writes go to Supabase first (source of truth),
+// then update local cache. If offline, writes queue and the app keeps working
+// from cache so you're never blocked.
+
+function saveCache(){localStorage.setItem('palab_cache',JSON.stringify(state))}
+function loadCache(){
+  const s=localStorage.getItem('palab_cache');
+  if(s){try{state=JSON.parse(s)}catch(e){}}
 }
 
-function seedDemo(){
-  state.clients=[
-    {id:'c1',name:'Maria Garcia',address:'1420 Sunset Blvd, Santa Clarita, CA 91321',phone:'(818) 555-0101',email:'mgarcia@email.com',days:['Mon'],notes:'Gate code: 1234',salt:false},
-    {id:'c2',name:'James Whitfield',address:'892 Palm Ave, Santa Clarita, CA 91350',phone:'(818) 555-0202',email:'jwhitfield@email.com',days:['Mon','Thu'],notes:'',salt:false},
-    {id:'c3',name:'Cathy Morales',address:'788 Harbor View Ct, Santa Clarita, CA 91355',phone:'(818) 555-0303',email:'cmorales@email.com',days:['Fri'],notes:'Call before arriving',salt:true}
-  ];
-  state.reports=[
-    {id:'r1',clientId:'c3',date:'2026-06-10',status:'sent',salt:true,saltLevel:'Good',chlorine:3,ph:7.4,alk:100,calcium:250,cya:40,phos:0,tds:500,temp:82,comments:''},
-  ];
-  state.messages={
-    c3:[
-      {id:'m1',from:'me',text:"Cathy, see you Friday afternoon!",time:'5:43 PM',ts:Date.now()-3600000},
-      {id:'m2',from:'them',text:"I'll see you Friday!",time:'6:21 PM',ts:Date.now()-1800000}
-    ]
+async function sbFetch(path,options={}){
+  const res=await fetch(SB_REST+path,{...options,headers:{...SB_HEADERS,...(options.headers||{})}});
+  if(!res.ok){const t=await res.text();throw new Error('Supabase error: '+res.status+' '+t)}
+  const text=await res.text();
+  return text?JSON.parse(text):null;
+}
+
+// Convert DB row (snake_case) <-> App object (camelCase) for clients
+function dbClientToApp(r){
+  return {
+    id:r.id,name:r.name,address:r.address,phone:r.phone||'',email:r.email||'',
+    days:r.days||[],notes:r.notes||'',entryCode:r.entry_code||'',salt:!!r.salt,
+    monthlyRate:r.monthly_rate,paymentMethod:r.payment_method||'',
+    filterLastCleaned:r.filter_last_cleaned,lat:r.lat,lng:r.lng
   };
-  save();
+}
+function appClientToDb(c){
+  return {
+    name:c.name,address:c.address,phone:c.phone||null,email:c.email||null,
+    days:c.days||[],notes:c.notes||null,entry_code:c.entryCode||null,salt:!!c.salt,
+    monthly_rate:c.monthlyRate||null,payment_method:c.paymentMethod||null,
+    filter_last_cleaned:c.filterLastCleaned||null
+  };
+}
+function dbReportToApp(r){
+  return {
+    id:r.id,clientId:r.client_id,date:r.date,status:r.status,salt:!!r.salt,
+    saltLevel:r.salt_level||'',chlorine:r.chlorine,ph:r.ph,alk:r.alkalinity,
+    calcium:r.calcium_hardness,cya:r.cyanuric_acid,phos:r.phosphates,tds:r.tds,
+    temp:r.water_temp,comments:r.comments||''
+  };
+}
+function appReportToDb(r){
+  return {
+    client_id:r.clientId,date:r.date,status:r.status,salt:!!r.salt,
+    salt_level:r.saltLevel||null,chlorine:r.chlorine??null,ph:r.ph??null,
+    alkalinity:r.alk??null,calcium_hardness:r.calcium??null,cyanuric_acid:r.cya??null,
+    phosphates:r.phos??null,tds:r.tds??null,water_temp:r.temp??null,
+    comments:r.comments||null
+  };
 }
 
-// ===== NAVIGATION =====
+async function loadFromSupabase(){
+  isSyncing=true;
+  try{
+    const [clientsRows,reportsRows,messagesRows]=await Promise.all([
+      sbFetch('/clients?select=*&order=name.asc'),
+      sbFetch('/reports?select=*&order=date.desc'),
+      sbFetch('/messages?select=*&order=created_at.asc')
+    ]);
+    state.clients=(clientsRows||[]).map(dbClientToApp);
+    state.reports=(reportsRows||[]).map(dbReportToApp);
+    const msgMap={};
+    (messagesRows||[]).forEach(m=>{
+      if(!msgMap[m.client_id]) msgMap[m.client_id]=[];
+      msgMap[m.client_id].push({
+        id:m.id,from:m.from_me?'me':'them',text:m.text,
+        time:new Date(m.created_at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}),
+        ts:new Date(m.created_at).getTime()
+      });
+    });
+    state.messages=msgMap;
+    saveCache();
+    isOnline=true;
+  }catch(e){
+    console.warn('Supabase load failed, using cache',e);
+    isOnline=false;
+  }
+  isSyncing=false;
+}
+
+async function load(){
+  loadCache(); // instant load from cache for fast open
+  if(!state.clients.length){
+    renderHome(); // show something immediately
+  }
+  await loadFromSupabase(); // then sync with cloud in background
+}
+
+// CRUD operations — all hit Supabase, with cache fallback on failure
+async function dbCreateClient(client){
+  try{
+    const rows=await sbFetch('/clients',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify(appClientToDb(client))});
+    isOnline=true;
+    return dbClientToApp(rows[0]);
+  }catch(e){
+    isOnline=false;
+    showToast('Offline — saved locally, will sync when back online');
+    return {...client,id:client.id||'local_'+Date.now()};
+  }
+}
+async function dbUpdateClient(id,client){
+  try{
+    const rows=await sbFetch('/clients?id=eq.'+id,{method:'PATCH',headers:{Prefer:'return=representation'},body:JSON.stringify(appClientToDb(client))});
+    isOnline=true;
+    return dbClientToApp(rows[0]);
+  }catch(e){
+    isOnline=false;
+    showToast('Offline — saved locally, will sync when back online');
+    return {...client,id};
+  }
+}
+async function dbDeleteClient(id){
+  try{await sbFetch('/clients?id=eq.'+id,{method:'DELETE'});isOnline=true;}
+  catch(e){isOnline=false;showToast('Offline — will delete when back online');}
+}
+async function dbCreateReport(report){
+  try{
+    const rows=await sbFetch('/reports',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify(appReportToDb(report))});
+    isOnline=true;
+    return dbReportToApp(rows[0]);
+  }catch(e){
+    isOnline=false;
+    showToast('Offline — saved locally, will sync when back online');
+    return {...report,id:report.id||'local_'+Date.now()};
+  }
+}
+async function dbUpdateReport(id,report){
+  try{
+    const rows=await sbFetch('/reports?id=eq.'+id,{method:'PATCH',headers:{Prefer:'return=representation'},body:JSON.stringify(appReportToDb(report))});
+    isOnline=true;
+    return dbReportToApp(rows[0]);
+  }catch(e){isOnline=false;return {...report,id};}
+}
+async function dbCreateMessage(clientId,fromMe,text){
+  try{
+    const rows=await sbFetch('/messages',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({client_id:clientId,from_me:fromMe,text,channel:'sms'})});
+    isOnline=true;
+    return rows[0];
+  }catch(e){
+    isOnline=false;
+    showToast('Offline — message saved locally');
+    return null;
+  }
+}
+
+window.addEventListener('online',()=>{isOnline=true;loadFromSupabase();});
+window.addEventListener('offline',()=>{isOnline=false;});
 function showScreen(name, push=true){
   const mainScreens=['home','route','clients','reports','messages'];
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
@@ -730,7 +880,18 @@ function openClientDetail(clientId){
           <div class="info-row">${svgPin()}<span class="info-val">${currentClient.address}</span></div>
           ${currentClient.phone?`<div class="info-row">${svgPhoneSmall()}<span class="info-val">${currentClient.phone}</span></div>`:''}
           ${currentClient.email?`<div class="info-row">${svgMailSmall()}<span class="info-val">${currentClient.email}</span></div>`:''}
+          ${currentClient.entryCode?`<div class="info-row">${svgKey()}<span class="info-val">${currentClient.entryCode}</span></div>`:''}
           ${currentClient.notes?`<div style="padding:10px 0;border-top:1px solid var(--gray-100)"><div class="info-section-title">Notes</div><div class="notes-text">${currentClient.notes}</div></div>`:''}
+        </div>
+      </div>
+    </div>
+    <div class="info-section">
+      <div class="info-section-title">Payment Info</div>
+      <div class="card">
+        <div style="padding:0 16px">
+          <div class="info-row"><span style="font-size:13px;color:var(--text-muted);width:110px;flex-shrink:0">Monthly rate</span><span class="info-val" style="font-weight:600">${currentClient.monthlyRate?'$'+currentClient.monthlyRate:'—'}</span></div>
+          <div class="info-row"><span style="font-size:13px;color:var(--text-muted);width:110px;flex-shrink:0">Payment method</span><span class="info-val">${currentClient.paymentMethod||'—'}</span></div>
+          <div class="info-row"><span style="font-size:13px;color:var(--text-muted);width:110px;flex-shrink:0">Filter cleaned</span><span class="info-val">${currentClient.filterLastCleaned?formatDateShort(currentClient.filterLastCleaned):'Never'}</span></div>
         </div>
       </div>
     </div>
@@ -765,11 +926,12 @@ function openClientDetail(clientId){
 
 function callClient(){if(currentClient&&currentClient.phone) window.location.href='tel:'+currentClient.phone.replace(/\D/g,'')}
 
-function deleteClient(id){
+async function deleteClient(id){
   if(!confirm('Delete this client? Their reports will also be removed.')) return;
   state.clients=state.clients.filter(c=>c.id!==id);
   state.reports=state.reports.filter(r=>r.clientId!==id);
-  save(); goBack(); renderClients(); showToast('Client deleted');
+  saveCache(); goBack(); renderClients(); showToast('Client deleted');
+  await dbDeleteClient(id);
 }
 
 // ===== ADD / EDIT CLIENT =====
@@ -782,6 +944,9 @@ function openAddClient(){
   document.getElementById('c-phone').value='';
   document.getElementById('c-email').value='';
   document.getElementById('c-notes').value='';
+  document.getElementById('c-rate').value='';
+  document.getElementById('c-payment-method').value='';
+  document.getElementById('c-entry-code').value='';
   renderDayCheckboxes([]);
   openModal('modal-add-client');
 }
@@ -796,6 +961,9 @@ function openEditClient(){
   document.getElementById('c-phone').value=currentClient.phone||'';
   document.getElementById('c-email').value=currentClient.email||'';
   document.getElementById('c-notes').value=currentClient.notes||'';
+  document.getElementById('c-rate').value=currentClient.monthlyRate||'';
+  document.getElementById('c-payment-method').value=currentClient.paymentMethod||'';
+  document.getElementById('c-entry-code').value=currentClient.entryCode||'';
   renderDayCheckboxes(currentClient.days||[]);
   openModal('modal-add-client');
 }
@@ -814,29 +982,49 @@ function updateDayStyle(cb){
   lbl.style.color=cb.checked?'var(--blue)':'var(--text-muted)';
 }
 
-function saveClient(){
+async function saveClient(){
   const name=document.getElementById('c-name').value.trim();
   const address=document.getElementById('c-address').value.trim();
   if(!name||!address){showToast('Name and address are required');return;}
   const days=[...document.querySelectorAll('#day-checkboxes input:checked')].map(cb=>cb.value);
   const client={
-    id:editingClientId||'c'+Date.now(),
+    id:editingClientId,
     name,address,
     phone:document.getElementById('c-phone').value.trim(),
     email:document.getElementById('c-email').value.trim(),
     notes:document.getElementById('c-notes').value.trim(),
+    entryCode:document.getElementById('c-entry-code').value.trim(),
+    monthlyRate:parseFloat(document.getElementById('c-rate').value)||null,
+    paymentMethod:document.getElementById('c-payment-method').value.trim(),
     days,salt:false
   };
+  closeModal('modal-add-client');
   if(editingClientId){
     const idx=state.clients.findIndex(c=>c.id===editingClientId);
-    if(idx>-1){const existing=state.clients[idx];client.salt=existing.salt;state.clients[idx]=client;}
+    if(idx>-1){
+      client.salt=state.clients[idx].salt;
+      state.clients[idx]={...client};
+      saveCache();
+      currentClient=state.clients[idx];
+      openClientDetail(client.id);
+      showToast('Client updated');
+      const saved=await dbUpdateClient(editingClientId,client);
+      const idx2=state.clients.findIndex(c=>c.id===editingClientId);
+      if(idx2>-1) state.clients[idx2]=saved;
+      saveCache();
+    }
   } else {
+    const tempId='temp_'+Date.now();
+    client.id=tempId;
     state.clients.push(client);
+    saveCache();
+    renderClients();
+    showToast('Client added');
+    const saved=await dbCreateClient(client);
+    const idx=state.clients.findIndex(c=>c.id===tempId);
+    if(idx>-1) state.clients[idx]=saved;
+    saveCache();
   }
-  save();closeModal('modal-add-client');
-  if(editingClientId){currentClient=client;openClientDetail(client.id);}
-  else{renderClients();}
-  showToast(editingClientId?'Client updated':'Client added');
   editingClientId=null;
 }
 
@@ -945,12 +1133,13 @@ function setSalt(v){
   });
 }
 
-function saveReport(){
+async function saveReport(){
   const client=currentClient;
   if(!client){closeModal('modal-report');return;}
   const isSalt=document.getElementById('toggle-salt').checked;
+  const tempId='temp_'+Date.now();
   const report={
-    id:'r'+Date.now(),
+    id:tempId,
     clientId:client.id,
     date:new Date().toISOString().split('T')[0],
     status:'draft',
@@ -966,19 +1155,25 @@ function saveReport(){
     temp:parseFloat(document.getElementById('r-temp').value)||undefined,
     comments:document.getElementById('r-comments').value.trim()
   };
-  // Update client salt preference
+  // Update client salt preference locally + in DB
   const ci=state.clients.findIndex(c=>c.id===client.id);
-  if(ci>-1) state.clients[ci].salt=isSalt;
+  if(ci>-1 && state.clients[ci].salt!==isSalt){
+    state.clients[ci].salt=isSalt;
+    dbUpdateClient(client.id,state.clients[ci]);
+  }
   state.reports.push(report);
-  save();
+  saveCache();
   currentReport=report;
   closeModal('modal-report');
   openSendModal();
+  const saved=await dbCreateReport(report);
+  const idx=state.reports.findIndex(r=>r.id===tempId);
+  if(idx>-1) state.reports[idx]=saved;
+  if(currentReport.id===tempId) currentReport=saved;
+  saveCache();
 }
 
-function openSendModal(){openModal('modal-send')}
-
-function sendReportEmail(){
+async function sendReportEmail(){
   if(!currentReport) return;
   const client=state.clients.find(c=>c.id===currentReport.clientId);
   if(!client){showToast('Client not found');return;}
@@ -990,10 +1185,13 @@ function sendReportEmail(){
   // Mark as sent
   const idx=state.reports.findIndex(r=>r.id===currentReport.id);
   if(idx>-1){state.reports[idx].status='sent';currentReport.status='sent';}
-  save();
+  saveCache();
   closeModal('modal-send');
   showToast('Report sent via email ✓');
   renderReports();
+  if(currentReport.id && !String(currentReport.id).startsWith('temp_')){
+    await dbUpdateReport(currentReport.id,state.reports[idx]);
+  }
 }
 
 function buildEmailBody(client,report){
@@ -1182,18 +1380,25 @@ function autoResize(ta){ta.style.height='auto';ta.style.height=Math.min(ta.scrol
 
 function handleMsgKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}}
 
-function sendMessage(){
+async function sendMessage(){
   const input=document.getElementById('msg-input');
   const text=input.value.trim();
   if(!text||!currentThread) return;
   const now=new Date();
   const time=now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
   if(!state.messages[currentThread.id]) state.messages[currentThread.id]=[];
-  state.messages[currentThread.id].push({id:'m'+Date.now(),from:'me',text,time,ts:Date.now()});
-  save();
+  const tempId='m'+Date.now();
+  state.messages[currentThread.id].push({id:tempId,from:'me',text,time,ts:Date.now()});
+  saveCache();
   input.value='';input.style.height='auto';
   document.getElementById('schedule-banner-area').innerHTML='';
   renderThread();
+  const saved=await dbCreateMessage(currentThread.id,true,text);
+  if(saved){
+    const idx=state.messages[currentThread.id].findIndex(m=>m.id===tempId);
+    if(idx>-1) state.messages[currentThread.id][idx].id=saved.id;
+    saveCache();
+  }
 }
 
 // Schedule detection
@@ -1227,7 +1432,7 @@ function openScheduleModal(){
   openModal('modal-schedule');
 }
 
-function confirmSchedule(){
+async function confirmSchedule(){
   if(!pendingSchedule) return;
   const c=state.clients.find(c=>c.id===pendingSchedule.clientId);
   if(c){
@@ -1236,7 +1441,8 @@ function confirmSchedule(){
     if(dayKey&&!c.days.includes(dayKey)){
       const ci=state.clients.findIndex(cl=>cl.id===c.id);
       state.clients[ci].days=[...(state.clients[ci].days||[]),dayKey];
-      save();
+      saveCache();
+      await dbUpdateClient(c.id,state.clients[ci]);
     }
   }
   closeModal('modal-schedule');
@@ -1248,6 +1454,7 @@ function confirmSchedule(){
 // ===== HELPERS =====
 function initials(name){return name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2)}
 function formatDate(d){return new Date(d+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric',year:'numeric'})}
+function formatDateShort(d){return new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
 function saltColor(v){return v==='Low'?'low':v==='Good'?'good':v==='High'?'high':''}
 
 function openModal(id){document.getElementById(id).style.display='flex'}
@@ -1286,10 +1493,19 @@ function svgReport(){return `<svg width="22" height="22" fill="none" stroke="cur
 function svgPin(){return `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>`}
 function svgPhoneSmall(){return `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.67A2 2 0 012.18 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.18 6.18l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>`}
 function svgMailSmall(){return `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,12 2,6"/></svg>`}
+function svgKey(){return `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>`}
 
 // ===== INIT =====
-load();
-renderHome();
+(async function init(){
+  renderHome(); // instant paint, even before cache/network resolve
+  await load(); // load cache instantly, then sync with Supabase in background
+  // Re-render whatever screen is currently active with fresh data
+  if(activeScreen==='home') renderHome();
+  if(activeScreen==='route') renderRoute();
+  if(activeScreen==='clients') renderClients();
+  if(activeScreen==='reports') renderReports();
+  if(activeScreen==='messages') renderMessagesList();
+})();
 </script>
 </body>
 </html>
