@@ -232,7 +232,16 @@
   .pill-opt.active-high{border-color:var(--red);color:var(--red);background:var(--red-light)}
 
   /* Drag handle */
-  .drag-handle{color:var(--gray-400);cursor:grab;padding:0 4px}
+  .drag-handle{color:var(--gray-400);cursor:grab;padding:0 4px;flex-shrink:0}
+  .drag-handle:active{cursor:grabbing}
+
+  /* Stop done state */
+  .stop-done{background:var(--gray-50);opacity:.75}
+  .stop-num-done{background:var(--green-light);color:var(--green);font-size:11px}
+  .report-btn-done{background:var(--gray-100);color:var(--text-muted)}
+
+  /* Drag over highlight */
+  .stop-item[draggable]{transition:border-top .1s,opacity .2s;border-top:2px solid transparent}
 
   /* Notes */
   .notes-text{font-size:14px;color:var(--text);padding:10px 0}
@@ -800,37 +809,234 @@ function renderHome(){
 }
 
 // ===== ROUTE =====
-let selectedDay=null;
-function renderRoute(){
-  const now=new Date();
-  const todayIdx=now.getDay()===0?6:now.getDay()-1;
-  if(selectedDay===null) selectedDay=DAYS[todayIdx];
+let selectedDay = null;
+// routeOrders stores manually arranged order per day: { Mon: ['clientId1','clientId2',...], ... }
+let routeOrders = JSON.parse(localStorage.getItem('palab_route_orders') || '{}');
+let dragSrcIdx = null; // index of item being dragged
 
-  // Day selector
-  const ds=document.getElementById('day-selector');
-  ds.innerHTML=DAYS.map(d=>`<button class="day-btn${d===selectedDay?' active':''}" onclick="selectDay('${d}')">${d}</button>`).join('');
+function saveRouteOrders() {
+  localStorage.setItem('palab_route_orders', JSON.stringify(routeOrders));
+}
 
+function getOrderedClients(day) {
+  const dayClients = state.clients.filter(c => c.days && c.days.includes(day));
+  const order = routeOrders[day];
+  if (!order || !order.length) return dayClients;
+  // Sort by saved order, append any new clients not yet in order at end
+  const ordered = order.map(id => dayClients.find(c => c.id === id)).filter(Boolean);
+  const unordered = dayClients.filter(c => !order.includes(c.id));
+  return [...ordered, ...unordered];
+}
+
+function renderRoute() {
+  const now = new Date();
+  const todayIdx = now.getDay() === 0 ? 6 : now.getDay() - 1;
+  if (selectedDay === null) selectedDay = DAYS[todayIdx];
+  const ds = document.getElementById('day-selector');
+  ds.innerHTML = DAYS.map(d => `<button class="day-btn${d === selectedDay ? ' active' : ''}" onclick="selectDay('${d}')">${d}</button>`).join('');
   renderRouteDay();
 }
 
-function selectDay(d){selectedDay=d;renderRoute()}
+function selectDay(d) { selectedDay = d; renderRoute(); }
 
-function renderRouteDay(){
-  const clients=state.clients.filter(c=>c.days&&c.days.includes(selectedDay));
-  const rl=document.getElementById('route-list');
-  if(!clients.length){
-    rl.innerHTML=`<div class="empty"><div class="empty-icon">${svgMap()}</div><h3>No stops for ${selectedDay}</h3><p>Add clients with this service day to build your route</p></div>`;return;
+function renderRouteDay() {
+  const clients = getOrderedClients(selectedDay);
+  const rl = document.getElementById('route-list');
+
+  if (!clients.length) {
+    rl.innerHTML = `<div class="empty"><div class="empty-icon">${svgMap()}</div><h3>No stops for ${selectedDay}</h3><p>Add clients with this service day to build your route</p></div>`;
+    return;
   }
-  rl.innerHTML=clients.map((c,i)=>`
-    <div class="stop-item">
-      <div class="stop-num">${i+1}</div>
+
+  // Count today's completed reports
+  const today = new Date().toISOString().split('T')[0];
+  const completedIds = new Set(
+    state.reports.filter(r => r.date === today).map(r => r.clientId)
+  );
+
+  // Optimize button bar
+  const optimizeBar = `
+    <div style="padding:12px 20px 4px;display:flex;align-items:center;justify-content:space-between">
+      <span style="font-size:13px;color:var(--text-muted)">${clients.length} stop${clients.length !== 1 ? 's' : ''} · drag to reorder</span>
+      <button class="btn btn-sm btn-outline" onclick="optimizeRoute()" style="display:flex;align-items:center;gap:6px">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+        Optimize Route
+      </button>
+    </div>`;
+
+  const stopItems = clients.map((c, i) => {
+    const done = completedIds.has(c.id);
+    return `
+    <div class="stop-item${done ? ' stop-done' : ''}" 
+         draggable="true"
+         data-idx="${i}"
+         ondragstart="onDragStart(event,${i})"
+         ondragover="onDragOver(event)"
+         ondrop="onDrop(event,${i})"
+         ondragend="onDragEnd(event)">
+      <div class="drag-handle" style="touch-action:none">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/>
+        </svg>
+      </div>
+      <div class="stop-num${done ? ' stop-num-done' : ''}">${done ? '✓' : i + 1}</div>
       <div class="stop-info" onclick="openClientDetail('${c.id}')">
         <div class="stop-name">${c.name}</div>
         <div class="stop-addr">${c.address}</div>
       </div>
-      <button class="report-btn" onclick="openNewReport('${c.id}')">Report</button>
+      <button class="report-btn${done ? ' report-btn-done' : ''}" onclick="openNewReport('${c.id}')">
+        ${done ? 'New' : 'Report'}
+      </button>
       <div class="chevron" style="margin-left:8px;cursor:pointer" onclick="openClientDetail('${c.id}')">${svgChevron()}</div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+
+  rl.innerHTML = optimizeBar + `<div id="stop-list">${stopItems}</div>`;
+}
+
+// ===== DRAG TO REORDER =====
+function onDragStart(e, idx) {
+  dragSrcIdx = idx;
+  e.currentTarget.style.opacity = '0.5';
+  e.dataTransfer.effectAllowed = 'move';
+}
+function onDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  // Highlight drop target
+  document.querySelectorAll('.stop-item').forEach(el => el.style.borderTop = '');
+  e.currentTarget.style.borderTop = '2px solid var(--blue)';
+}
+function onDrop(e, dropIdx) {
+  e.preventDefault();
+  if (dragSrcIdx === null || dragSrcIdx === dropIdx) return;
+  const clients = getOrderedClients(selectedDay);
+  const order = clients.map(c => c.id);
+  const [moved] = order.splice(dragSrcIdx, 1);
+  order.splice(dropIdx, 0, moved);
+  routeOrders[selectedDay] = order;
+  saveRouteOrders();
+  renderRouteDay();
+}
+function onDragEnd(e) {
+  document.querySelectorAll('.stop-item').forEach(el => {
+    el.style.opacity = '';
+    el.style.borderTop = '';
+  });
+  dragSrcIdx = null;
+}
+
+// ===== OPTIMIZE ROUTE (GPS nearest-neighbor) =====
+function optimizeRoute() {
+  const clients = getOrderedClients(selectedDay);
+  if (clients.length < 2) { showToast('Need at least 2 stops to optimize'); return; }
+
+  const btn = document.querySelector('.btn-outline');
+  if (btn) { btn.textContent = 'Getting location...'; btn.disabled = true; }
+
+  if (!navigator.geolocation) {
+    showToast('GPS not available on this device');
+    if (btn) { btn.textContent = 'Optimize Route'; btn.disabled = false; }
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const { latitude: lat, longitude: lng } = pos.coords;
+      const sorted = nearestNeighborSort(clients, lat, lng);
+      routeOrders[selectedDay] = sorted.map(c => c.id);
+      saveRouteOrders();
+      renderRouteDay();
+      showToast('Route optimized ✓');
+    },
+    err => {
+      showToast('Could not get your location');
+      if (btn) { btn.textContent = 'Optimize Route'; btn.disabled = false; }
+    },
+    { timeout: 8000, enableHighAccuracy: false }
+  );
+}
+
+// Geocode an address to lat/lng using a simple approximation
+// For now we use a lat/lng lookup table for LA area zip codes
+// (Phase 4 will replace this with Google Maps Geocoding API)
+function addressToLatLng(address) {
+  // Rough center-of-area approximations for common areas in the route
+  const areaMap = [
+    { match: /studio city/i,      lat: 34.1395, lng: -118.3962 },
+    { match: /valley village/i,   lat: 34.1706, lng: -118.3967 },
+    { match: /sherman oaks/i,     lat: 34.1503, lng: -118.4494 },
+    { match: /burbank/i,          lat: 34.1808, lng: -118.3090 },
+    { match: /sunland/i,          lat: 34.2612, lng: -118.3073 },
+    { match: /sylmar/i,           lat: 34.3000, lng: -118.4483 },
+    { match: /granada hills/i,    lat: 34.2742, lng: -118.5003 },
+    { match: /west hills/i,       lat: 34.2012, lng: -118.6484 },
+    { match: /woodland hills/i,   lat: 34.1683, lng: -118.6059 },
+    { match: /saugus/i,           lat: 34.4192, lng: -118.5654 },
+    { match: /santa clarita/i,    lat: 34.3917, lng: -118.5426 },
+    { match: /clearbank/i,        lat: 34.4050, lng: -118.5600 },
+    { match: /cliffie/i,          lat: 34.4100, lng: -118.5400 },
+    { match: /sheffield/i,        lat: 34.3800, lng: -118.5500 },
+    { match: /camomile/i,         lat: 34.4200, lng: -118.5700 },
+    { match: /olympic crest/i,    lat: 34.2700, lng: -118.5200 },
+    { match: /lugar de oro/i,     lat: 34.4100, lng: -118.5300 },
+    { match: /mornington/i,       lat: 34.3900, lng: -118.5100 },
+    { match: /ruffner/i,          lat: 34.2400, lng: -118.4900 },
+    { match: /klee st/i,          lat: 34.2450, lng: -118.4950 },
+    { match: /valley spring/i,    lat: 34.1450, lng: -118.3900 },
+    { match: /greenleaf/i,        lat: 34.1500, lng: -118.4500 },
+    { match: /morrison/i,         lat: 34.1700, lng: -118.3950 },
+    { match: /bakman/i,           lat: 34.1400, lng: -118.3900 },
+    { match: /sunnyslope/i,       lat: 34.1550, lng: -118.4450 },
+    { match: /san feliciano/i,    lat: 34.1700, lng: -118.6000 },
+    { match: /juneau/i,           lat: 34.1750, lng: -118.5900 },
+    { match: /jumilla/i,          lat: 34.1800, lng: -118.5800 },
+    { match: /darro/i,            lat: 34.1650, lng: -118.6100 },
+    { match: /gantry/i,           lat: 34.1700, lng: -118.3960 },
+    { match: /vanowen/i,          lat: 34.2050, lng: -118.6500 },
+    { match: /cherokee/i,         lat: 34.1000, lng: -118.3350 },
+    { match: /braxton/i,          lat: 34.2750, lng: -118.5000 },
+    { match: /osborne/i,          lat: 34.3000, lng: -118.4500 },
+    { match: /odell/i,            lat: 34.2600, lng: -118.3100 },
+    { match: /fairview/i,         lat: 34.1850, lng: -118.3000 },
+    { match: /lima st/i,          lat: 34.1900, lng: -118.2950 },
+    { match: /dymond/i,           lat: 34.1950, lng: -118.3000 },
+  ];
+  const lower = address.toLowerCase();
+  for (const a of areaMap) {
+    if (a.match.test(address)) return { lat: a.lat, lng: a.lng };
+  }
+  // Default fallback: center of LA
+  return { lat: 34.2, lng: -118.45 };
+}
+
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function nearestNeighborSort(clients, startLat, startLng) {
+  const withCoords = clients.map(c => ({ ...c, ...addressToLatLng(c.address) }));
+  const result = [];
+  const remaining = [...withCoords];
+  let curLat = startLat, curLng = startLng;
+
+  while (remaining.length) {
+    let nearestIdx = 0;
+    let nearestDist = haversineKm(curLat, curLng, remaining[0].lat, remaining[0].lng);
+    for (let i = 1; i < remaining.length; i++) {
+      const d = haversineKm(curLat, curLng, remaining[i].lat, remaining[i].lng);
+      if (d < nearestDist) { nearestDist = d; nearestIdx = i; }
+    }
+    const next = remaining.splice(nearestIdx, 1)[0];
+    result.push(next);
+    curLat = next.lat;
+    curLng = next.lng;
+  }
+  return result;
 }
 
 // ===== CLIENTS =====
