@@ -264,8 +264,9 @@
           <div class="header-date" id="home-date"></div>
           <div class="header-title">Palab</div>
         </div>
-        <button class="header-action" onclick="showScreen('route')">
-          <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <button class="header-action" onclick="openAlerts()" style="position:relative">
+          <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+          <span id="alert-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:#C62828;color:#fff;font-size:10px;font-weight:700;min-width:18px;height:18px;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:0 4px;line-height:1"></span>
         </button>
       </div>
     </div>
@@ -318,6 +319,64 @@
       <div class="header-title" style="font-size:22px">Messages</div>
     </div>
     <div class="scroll-area" id="messages-list"></div>
+  </div>
+
+  <!-- ===== ALERTS SCREEN ===== -->
+  <div id="screen-alerts" class="screen">
+    <div class="header-simple">
+      <button class="back-btn" onclick="goBack()">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span class="screen-title">Alerts</span>
+      <div style="width:36px"></div>
+    </div>
+    <div class="scroll-area" id="alerts-list"></div>
+  </div>
+
+  <!-- ===== FILTER SETTINGS MODAL ===== -->
+  <div id="modal-filter" class="modal-overlay" style="display:none">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <div class="modal-title">Filter Settings</div>
+      <div id="filter-client-name" style="font-size:14px;color:var(--text-muted);margin-bottom:16px"></div>
+
+      <div class="form-group">
+        <label class="form-label">Filter Type</label>
+        <select class="form-input form-select" id="f-type">
+          <option value="">Select type...</option>
+          <option value="Cartridge">Cartridge</option>
+          <option value="Sand">Sand</option>
+          <option value="DE">DE (Diatomaceous Earth)</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Filter Size</label>
+        <input class="form-input" type="text" id="f-size" placeholder="e.g. 100 sq ft, 24 inch, Large...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Clean Every</label>
+        <div style="display:flex;gap:10px">
+          <input class="form-input" type="number" id="f-freq-val" placeholder="e.g. 3" style="flex:1;min-width:0">
+          <select class="form-input form-select" id="f-freq-unit" style="flex:1;min-width:0">
+            <option value="weeks">Weeks</option>
+            <option value="months" selected>Months</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Last Cleaned</label>
+        <input class="form-input" type="date" id="f-last-cleaned">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes <span style="text-transform:none;font-weight:400">(optional)</span></label>
+        <textarea class="form-input" id="f-notes" rows="2" placeholder="e.g. Rinse only, no soap"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" style="flex:1" onclick="closeModal('modal-filter')">Cancel</button>
+        <button class="btn btn-primary" style="flex:2" onclick="saveFilterSettings()">Save</button>
+      </div>
+    </div>
   </div>
 
   <!-- ===== CLIENT DETAIL ===== -->
@@ -615,7 +674,12 @@ function dbClientToApp(r){
     id:r.id,name:r.name,address:r.address,phone:r.phone||'',email:r.email||'',
     days:r.days||[],notes:r.notes||'',entryCode:r.entry_code||'',salt:!!r.salt,
     monthlyRate:r.monthly_rate,paymentMethod:r.payment_method||'',
-    filterLastCleaned:r.filter_last_cleaned,lat:r.lat,lng:r.lng
+    filterLastCleaned:r.filter_last_cleaned,lat:r.lat,lng:r.lng,
+    filterType:r.filter_type||'',
+    filterSize:r.filter_size||'',
+    filterFreqValue:r.filter_freq_value||null,
+    filterFreqUnit:r.filter_freq_unit||'months',
+    filterNotes:r.filter_notes||''
   };
 }
 function appClientToDb(c){
@@ -623,7 +687,12 @@ function appClientToDb(c){
     name:c.name,address:c.address,phone:c.phone||null,email:c.email||null,
     days:c.days||[],notes:c.notes||null,entry_code:c.entryCode||null,salt:!!c.salt,
     monthly_rate:c.monthlyRate||null,payment_method:c.paymentMethod||null,
-    filter_last_cleaned:c.filterLastCleaned||null
+    filter_last_cleaned:c.filterLastCleaned||null,
+    filter_type:c.filterType||null,
+    filter_size:c.filterSize||null,
+    filter_freq_value:c.filterFreqValue||null,
+    filter_freq_unit:c.filterFreqUnit||null,
+    filter_notes:c.filterNotes||null
   };
 }
 function dbReportToApp(r){
@@ -751,11 +820,12 @@ function showScreen(name, push=true){
   if(push && activeScreen !== name) screenStack.push(activeScreen);
   activeScreen = name;
   // render
-  if(name==='home') renderHome();
+  if(name==='home'){renderHome();updateAlertBadge();}
   if(name==='route') renderRoute();
   if(name==='clients') renderClients();
   if(name==='reports') renderReports();
   if(name==='messages') renderMessagesList();
+  if(name==='alerts') renderAlerts();
 }
 
 function goBack(){
@@ -1097,7 +1167,24 @@ function openClientDetail(clientId){
         <div style="padding:0 16px">
           <div class="info-row"><span style="font-size:13px;color:var(--text-muted);width:110px;flex-shrink:0">Monthly rate</span><span class="info-val" style="font-weight:600">${currentClient.monthlyRate?'$'+currentClient.monthlyRate:'—'}</span></div>
           <div class="info-row"><span style="font-size:13px;color:var(--text-muted);width:110px;flex-shrink:0">Payment method</span><span class="info-val">${currentClient.paymentMethod||'—'}</span></div>
-          <div class="info-row"><span style="font-size:13px;color:var(--text-muted);width:110px;flex-shrink:0">Filter cleaned</span><span class="info-val">${currentClient.filterLastCleaned?formatDateShort(currentClient.filterLastCleaned):'Never'}</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="info-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="info-section-title">Filter</div>
+        <button class="btn btn-sm btn-outline" onclick="openFilterSettings('${clientId}')">Edit</button>
+      </div>
+      <div class="card">
+        <div style="padding:0 16px">
+          ${currentClient.filterType?
+            `<div class="info-row"><span style="font-size:13px;color:var(--text-muted);width:110px;flex-shrink:0">Type</span><span class="info-val">${currentClient.filterType}</span></div>`:
+            `<div style="padding:14px 0;font-size:14px;color:var(--text-muted);text-align:center">No filter info yet — tap Edit to add</div>`}
+          ${currentClient.filterSize?`<div class="info-row"><span style="font-size:13px;color:var(--text-muted);width:110px;flex-shrink:0">Size</span><span class="info-val">${currentClient.filterSize}</span></div>`:''}
+          ${currentClient.filterFreqValue?`<div class="info-row"><span style="font-size:13px;color:var(--text-muted);width:110px;flex-shrink:0">Clean every</span><span class="info-val">${currentClient.filterFreqValue} ${currentClient.filterFreqUnit}</span></div>`:''}
+          ${currentClient.filterLastCleaned?`<div class="info-row"><span style="font-size:13px;color:var(--text-muted);width:110px;flex-shrink:0">Last cleaned</span><span class="info-val">${formatDateShort(currentClient.filterLastCleaned)}</span></div>`:''}
+          ${currentClient.filterType&&currentClient.filterFreqValue?`<div class="info-row"><span style="font-size:13px;color:var(--text-muted);width:110px;flex-shrink:0">Next due</span><span class="info-val ${filterDueClass(currentClient)}">${filterNextDue(currentClient)}</span></div>`:''}
+          ${currentClient.filterNotes?`<div style="padding:10px 0;border-top:1px solid var(--gray-100)"><div class="info-section-title">Filter Notes</div><div class="notes-text">${currentClient.filterNotes}</div></div>`:''}
         </div>
       </div>
     </div>
@@ -1657,6 +1744,177 @@ async function confirmSchedule(){
   showToast('Visit scheduled ✓');
 }
 
+// ===== FILTER SETTINGS =====
+function openFilterSettings(clientId){
+  const c = state.clients.find(cl => cl.id === clientId);
+  if(!c) return;
+  document.getElementById('filter-client-name').textContent = c.name;
+  document.getElementById('f-type').value = c.filterType || '';
+  document.getElementById('f-size').value = c.filterSize || '';
+  document.getElementById('f-freq-val').value = c.filterFreqValue || '';
+  document.getElementById('f-freq-unit').value = c.filterFreqUnit || 'months';
+  document.getElementById('f-last-cleaned').value = c.filterLastCleaned || '';
+  document.getElementById('f-notes').value = c.filterNotes || '';
+  openModal('modal-filter');
+}
+
+async function saveFilterSettings(){
+  if(!currentClient) return;
+  const freqVal = parseFloat(document.getElementById('f-freq-val').value) || null;
+  const updates = {
+    ...currentClient,
+    filterType: document.getElementById('f-type').value,
+    filterSize: document.getElementById('f-size').value.trim(),
+    filterFreqValue: freqVal,
+    filterFreqUnit: document.getElementById('f-freq-unit').value,
+    filterLastCleaned: document.getElementById('f-last-cleaned').value || null,
+    filterNotes: document.getElementById('f-notes').value.trim()
+  };
+  const idx = state.clients.findIndex(c => c.id === currentClient.id);
+  if(idx > -1){ state.clients[idx] = updates; currentClient = updates; }
+  saveCache();
+  closeModal('modal-filter');
+  openClientDetail(currentClient.id);
+  updateAlertBadge();
+  showToast('Filter settings saved');
+  await dbUpdateClient(currentClient.id, updates);
+}
+
+// ===== FILTER DUE LOGIC =====
+function filterNextDueDateObj(client){
+  if(!client.filterLastCleaned || !client.filterFreqValue) return null;
+  const last = new Date(client.filterLastCleaned + 'T00:00:00');
+  const due = new Date(last);
+  if(client.filterFreqUnit === 'weeks'){
+    due.setDate(due.getDate() + (client.filterFreqValue * 7));
+  } else {
+    due.setMonth(due.getMonth() + client.filterFreqValue);
+  }
+  return due;
+}
+
+function filterNextDue(client){
+  const due = filterNextDueDateObj(client);
+  if(!due) return '—';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const diff = Math.round((due - today) / 86400000);
+  if(diff < 0) return `Overdue by ${Math.abs(diff)} day${Math.abs(diff)!==1?'s':''}`;
+  if(diff === 0) return 'Due today';
+  if(diff <= 7) return `Due in ${diff} day${diff!==1?'s':''}`;
+  return `Due ${due.toLocaleDateString('en-US',{month:'short',day:'numeric'})}`;
+}
+
+function filterDueClass(client){
+  const due = filterNextDueDateObj(client);
+  if(!due) return '';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const diff = Math.round((due - today) / 86400000);
+  if(diff < 0) return 'reading-val bad';
+  if(diff <= 7) return 'reading-val low';
+  return 'reading-val good';
+}
+
+function getFilterAlerts(){
+  const today = new Date(); today.setHours(0,0,0,0);
+  return state.clients
+    .filter(c => c.filterFreqValue && c.filterLastCleaned)
+    .map(c => {
+      const due = filterNextDueDateObj(c);
+      if(!due) return null;
+      const diff = Math.round((due - today) / 86400000);
+      return { client: c, due, diff };
+    })
+    .filter(a => a && a.diff <= 14) // show alerts within 14 days + overdue
+    .sort((a, b) => a.diff - b.diff);
+}
+
+// ===== ALERT BADGE =====
+function updateAlertBadge(){
+  const alerts = getFilterAlerts();
+  const badge = document.getElementById('alert-badge');
+  if(!badge) return;
+  if(alerts.length === 0){
+    badge.style.display = 'none';
+  } else {
+    badge.style.display = 'flex';
+    badge.textContent = alerts.length;
+  }
+}
+
+// ===== ALERTS SCREEN =====
+function openAlerts(){
+  renderAlerts();
+  showScreen('alerts');
+}
+
+function renderAlerts(){
+  const alerts = getFilterAlerts();
+  const el = document.getElementById('alerts-list');
+  if(!alerts.length){
+    el.innerHTML = `<div class="empty">
+      <div class="empty-icon" style="color:var(--green)">${svgBellLg()}</div>
+      <h3>All clear!</h3>
+      <p>No filter cleanings due in the next 14 days</p>
+    </div>`;
+    return;
+  }
+  const overdue = alerts.filter(a => a.diff < 0);
+  const upcoming = alerts.filter(a => a.diff >= 0);
+  let html = '';
+  if(overdue.length){
+    html += `<div style="padding:12px 20px 4px"><span style="font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.5px">Overdue (${overdue.length})</span></div>`;
+    html += overdue.map(a => alertCard(a)).join('');
+  }
+  if(upcoming.length){
+    html += `<div style="padding:12px 20px 4px"><span style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Upcoming</span></div>`;
+    html += upcoming.map(a => alertCard(a)).join('');
+  }
+  el.innerHTML = html;
+}
+
+function alertCard(alert){
+  const c = alert.client;
+  const isOverdue = alert.diff < 0;
+  const dueText = filterNextDue(c);
+  const badgeBg = isOverdue ? 'var(--red-light)' : 'var(--orange-light)';
+  const badgeColor = isOverdue ? 'var(--red)' : 'var(--orange)';
+  const borderColor = isOverdue ? 'var(--red)' : 'var(--gray-200)';
+  return `
+    <div class="card" style="margin:8px 20px;border-color:${borderColor}">
+      <div style="padding:14px 16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div>
+            <div style="font-size:15px;font-weight:600;color:var(--text)">${c.name}</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${c.address}</div>
+          </div>
+          <span style="font-size:12px;font-weight:700;color:${badgeColor};padding:4px 8px;background:${badgeBg};border-radius:8px;flex-shrink:0;margin-left:8px">${dueText}</span>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+          ${c.filterType ? `<span class="meta-pill">${c.filterType}</span>` : ''}
+          ${c.filterSize ? `<span class="meta-pill">${c.filterSize}</span>` : ''}
+          ${c.filterFreqValue ? `<span class="meta-pill">Every ${c.filterFreqValue} ${c.filterFreqUnit}</span>` : ''}
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-sm btn-primary" style="flex:1" onclick="markFilterCleaned('${c.id}')">✓ Mark Cleaned Today</button>
+          <button class="btn btn-sm btn-secondary" onclick="openClientDetail('${c.id}')">View Client</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function markFilterCleaned(clientId){
+  const today = new Date().toISOString().split('T')[0];
+  const idx = state.clients.findIndex(c => c.id === clientId);
+  if(idx < 0) return;
+  state.clients[idx].filterLastCleaned = today;
+  saveCache();
+  renderAlerts();
+  updateAlertBadge();
+  showToast('Filter marked as cleaned ✓');
+  await dbUpdateClient(clientId, state.clients[idx]);
+  // Also update the Supabase filter_last_cleaned column directly
+}
+
 // ===== HELPERS =====
 function initials(name){return name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2)}
 function formatDate(d){return new Date(d+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric',year:'numeric'})}
@@ -1700,12 +1958,13 @@ function svgPin(){return `<svg width="16" height="16" fill="none" stroke="curren
 function svgPhoneSmall(){return `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.67A2 2 0 012.18 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.18 6.18l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>`}
 function svgMailSmall(){return `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,12 2,6"/></svg>`}
 function svgKey(){return `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>`}
+function svgBellLg(){return `<svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>`}
 
 // ===== INIT =====
 (async function init(){
-  renderHome(); // instant paint, even before cache/network resolve
-  await load(); // load cache instantly, then sync with Supabase in background
-  // Re-render whatever screen is currently active with fresh data
+  renderHome();
+  await load();
+  updateAlertBadge();
   if(activeScreen==='home') renderHome();
   if(activeScreen==='route') renderRoute();
   if(activeScreen==='clients') renderClients();
