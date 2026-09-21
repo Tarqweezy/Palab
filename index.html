@@ -15,6 +15,10 @@
   const SUPABASE_URL = "https://cjfeynzytmqwrdgvouvl.supabase.co";
   const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqZmV5bnp5dG1xd3JkZ3ZvdXZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4MjkyODYsImV4cCI6MjA5NzQwNTI4Nn0.LSmqa39d9j3Jh1FkJEW3KHv7r8dP-h3qwLr_KkXl1_o";
   const SB_REST = SUPABASE_URL + "/rest/v1";
+
+  // ===== EMAIL RELAY CONFIG =====
+  // Paste your Apps Script Web App URL here after deploying
+  const EMAIL_RELAY_URL = "https://script.google.com/macros/s/AKfycbyT1tQdu8txeS1W-iQQW6g5aGdZRfkH9lqLLUzaNR4bOm1l2TFgPy2V9MRD3ov9nQJMRw/exec";
   const SB_HEADERS = {
     "apikey": SUPABASE_ANON_KEY,
     "Authorization": "Bearer " + SUPABASE_ANON_KEY,
@@ -823,7 +827,7 @@ async function dbCreateClient(client){
     return dbClientToApp(rows[0]);
   }catch(e){
     isOnline=false;
-    showToast('Offline — saved locally, will sync when back online');
+    showToast('Save failed: '+e.message,5000);
     return {...client,id:client.id||'local_'+Date.now()};
   }
 }
@@ -849,7 +853,7 @@ async function dbCreateReport(report){
     return dbReportToApp(rows[0]);
   }catch(e){
     isOnline=false;
-    showToast('Offline — saved locally, will sync when back online');
+    showToast('Report save failed: '+e.message,5000);
     return {...report,id:report.id||'local_'+Date.now()};
   }
 }
@@ -1576,14 +1580,10 @@ function setSalt(v){
 async function saveReport(){
   const client=currentClient;
   if(!client){closeModal('modal-report');return;}
-  // Validate photo
+  // Photo is optional — warn but don't block
   if(!currentPoolPhoto){
-    document.getElementById('photo-status-msg').textContent='Please take a photo of the pool before saving.';
-    document.getElementById('photo-status-msg').style.color='var(--red)';
-    document.getElementById('photo-preview-wrap').style.borderColor='var(--red)';
-    document.getElementById('photo-preview-wrap').style.borderStyle='solid';
-    document.getElementById('photo-preview-wrap').scrollIntoView({behavior:'smooth',block:'center'});
-    return;
+    document.getElementById('photo-status-msg').textContent='No photo — report will save without one.';
+    document.getElementById('photo-status-msg').style.color='var(--text-muted)';
   }
   const isSalt=document.getElementById('toggle-salt').checked;
   const tempId='temp_'+Date.now();
@@ -1640,17 +1640,39 @@ async function sendReportEmail(){
   if(!currentReport) return;
   const client=state.clients.find(c=>c.id===currentReport.clientId);
   if(!client){showToast('Client not found');return;}
-  if(!client.email){showToast('No email on file for this client');closeModal('modal-send');return;}
-  // Build mailto
+  if(!client.email){showToast('No email on file for '+client.name);closeModal('modal-send');return;}
+
   const sub='GK Swimming Pools - Pool Report';
   const body=buildEmailBody(client,currentReport);
-  window.location.href=`mailto:${client.email}?subject=${encodeURIComponent(sub)}&body=${encodeURIComponent(body)}`;
-  // Mark as sent
+
+  if(EMAIL_RELAY_URL){
+    // Send directly via Apps Script relay
+    showToast('Sending email…',8000);
+    try{
+      const res=await fetch(EMAIL_RELAY_URL,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({to:client.email,subject:sub,body})
+      });
+      const json=await res.json();
+      if(!json.ok) throw new Error(json.error||'Unknown error');
+      showToast('Email sent to '+client.email+' ✓');
+    }catch(err){
+      showToast('Email failed: '+err.message,5000);
+      return;
+    }
+  } else {
+    // Fallback: open Gmail compose in browser
+    const gmailUrl='https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent(client.email)+'&su='+encodeURIComponent(sub)+'&body='+encodeURIComponent(body);
+    window.open(gmailUrl,'_blank');
+    showToast('Opened Gmail — tap Send to deliver');
+  }
+
+  // Mark report as sent
   const idx=state.reports.findIndex(r=>r.id===currentReport.id);
   if(idx>-1){state.reports[idx].status='sent';currentReport.status='sent';}
   saveCache();
   closeModal('modal-send');
-  showToast('Report sent via email ✓');
   renderReports();
   if(currentReport.id && !String(currentReport.id).startsWith('temp_')){
     await dbUpdateReport(currentReport.id,state.reports[idx]);
