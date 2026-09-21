@@ -2158,30 +2158,33 @@ function closeModal(id){
 function openSendModal(){openModal('modal-send');}
 
 function attachSwipeDismiss(overlay,sheet){
-  // Remove any previous listeners to avoid duplicates
   if(sheet._swipeAttached) return;
   sheet._swipeAttached=true;
-  let startY=0,startX=0,curY=0,dragging=false;
+
+  // Only the handle pill triggers swipe-to-dismiss — NOT the form body
+  const handle=sheet.querySelector('.modal-handle');
+  const dragTarget=handle||sheet;
+
+  let startY=0,curY=0,dragging=false;
+
   function onStart(e){
     const t=e.touches?e.touches[0]:e;
-    startY=t.clientY; startX=t.clientX; curY=0; dragging=true;
+    startY=t.clientY; curY=0; dragging=true;
     sheet.style.transition='none';
   }
   function onMove(e){
     if(!dragging) return;
     const t=e.touches?e.touches[0]:e;
     const dy=t.clientY-startY;
-    const dx=Math.abs(t.clientX-startX);
-    // Only dismiss on downward swipe, not horizontal scroll
-    if(dx>dy*1.5){dragging=false;return;}
-    curY=Math.max(0,dy); // don't allow swiping up
+    if(dy<0){dragging=false;return;} // ignore upward drags
+    curY=dy;
     sheet.style.transform='translateY('+curY+'px)';
+    // Only prevent default on the handle so form scroll still works
     if(e.cancelable) e.preventDefault();
   }
   function onEnd(){
     if(!dragging) return;
     dragging=false;
-    // If dragged more than 80px down, dismiss
     if(curY>80){
       closeModal(overlay.id);
     } else {
@@ -2189,11 +2192,12 @@ function attachSwipeDismiss(overlay,sheet){
       sheet.style.transform='translateY(0)';
     }
   }
-  // Attach to the handle for precise control, and also the sheet header area
-  sheet.addEventListener('touchstart',onStart,{passive:true});
-  sheet.addEventListener('touchmove',onMove,{passive:false});
-  sheet.addEventListener('touchend',onEnd,{passive:true});
-  // Tap the dark backdrop to dismiss too
+
+  dragTarget.addEventListener('touchstart',onStart,{passive:true});
+  dragTarget.addEventListener('touchmove',onMove,{passive:false});
+  dragTarget.addEventListener('touchend',onEnd,{passive:true});
+
+  // Tapping the dark backdrop also dismisses
   overlay.addEventListener('click',function(e){
     if(e.target===overlay) closeModal(overlay.id);
   });
