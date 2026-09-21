@@ -680,10 +680,17 @@ const RANGES = {
 
 function saveCache(){
   // Save state WITHOUT photo data (stored separately to keep cache lean)
-  const stateForCache={...state,reports:state.reports.map(r=>{
-    const {photoData,...rest}=r; return rest;
-  })};
-  localStorage.setItem('palab_cache',JSON.stringify(stateForCache));
+  try{
+    const reportsNoPhoto=state.reports.map(function(r){
+      return {id:r.id,clientId:r.clientId,date:r.date,status:r.status,
+        salt:r.salt,saltLevel:r.saltLevel,chlorine:r.chlorine,ph:r.ph,
+        alk:r.alk,calcium:r.calcium,cya:r.cya,phos:r.phos,tds:r.tds,
+        temp:r.temp,comments:r.comments};
+    });
+    localStorage.setItem('palab_cache',JSON.stringify({
+      clients:state.clients,reports:reportsNoPhoto,messages:state.messages,schedules:state.schedules
+    }));
+  }catch(e){console.warn('Cache save failed',e);}
 }
 function saveReportPhoto(reportId,photoData){
   if(!reportId||!photoData) return;
@@ -694,7 +701,13 @@ function loadReportPhoto(reportId){
 }
 function loadCache(){
   const s=localStorage.getItem('palab_cache');
-  if(s){try{state=JSON.parse(s)}catch(e){}}
+  if(s){try{
+    const parsed=JSON.parse(s);
+    state.clients=parsed.clients||[];
+    state.reports=parsed.reports||[];
+    state.messages=parsed.messages||{};
+    state.schedules=parsed.schedules||{};
+  }catch(e){console.warn('Cache load failed',e);}}
 }
 
 async function sbFetch(path,options={}){
@@ -2107,6 +2120,7 @@ function saltColor(v){return v==='Low'?'low':v==='Good'?'good':v==='High'?'high'
 
 function openModal(id){document.getElementById(id).style.display='flex'}
 function closeModal(id){document.getElementById(id).style.display='none'}
+function openSendModal(){openModal('modal-send');}
 
 function showToast(msg){
   const t=document.getElementById('toast');
