@@ -189,7 +189,8 @@
   /* Modals */
   .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;display:flex;align-items:flex-end;justify-content:center}
   .modal{background:var(--surface);border-radius:var(--radius-lg) var(--radius-lg) 0 0;width:100%;max-width:430px;max-height:90vh;overflow-y:auto;padding:20px}
-  .modal-handle{width:36px;height:4px;background:var(--gray-300);border-radius:2px;margin:0 auto 20px}
+  .modal-handle{width:36px;height:5px;background:var(--gray-300);border-radius:3px;margin:0 auto 20px;cursor:grab}
+  .modal-handle:active{cursor:grabbing}
   .modal-title{font-size:18px;font-weight:700;margin-bottom:20px;color:var(--text)}
   .modal-footer{display:flex;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-100)}
 
@@ -785,19 +786,27 @@ async function loadFromSupabase(){
     saveCache();
     isOnline=true;
   }catch(e){
-    console.warn('Supabase load failed, using cache',e);
+    console.warn('Supabase load failed:',e);
     isOnline=false;
+    // Show the actual error so we can diagnose it
+    showToast('⚠️ Sync failed: '+e.message);
   }
   isSyncing=false;
 }
 
 async function load(){
-  loadCache(); // instant load from cache for fast open
-  if(!state.clients.length){
-    renderHome(); // show something immediately
-  }
-  await loadFromSupabase(); // then sync with cloud in background
+  loadCache();
+  renderHome();
+  await loadFromSupabase();
+  // Always re-render after Supabase returns, whether it succeeded or failed
+  updateAlertBadge();
+  if(activeScreen==='home') renderHome();
+  if(activeScreen==='route') renderRoute();
+  if(activeScreen==='clients') renderClients();
+  if(activeScreen==='reports') renderReports();
+  if(activeScreen==='messages') renderMessagesList();
 }
+
 
 // CRUD operations — all hit Supabase, with cache fallback on failure
 async function dbCreateClient(client){
@@ -2118,9 +2127,70 @@ function formatDate(d){return new Date(d+'T00:00:00').toLocaleDateString('en-US'
 function formatDateShort(d){return new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
 function saltColor(v){return v==='Low'?'low':v==='Good'?'good':v==='High'?'high':''}
 
-function openModal(id){document.getElementById(id).style.display='flex'}
-function closeModal(id){document.getElementById(id).style.display='none'}
+function openModal(id){
+  const overlay=document.getElementById(id);
+  overlay.style.display='flex';
+  const sheet=overlay.querySelector('.modal');
+  if(sheet){
+    sheet.style.transition='transform .25s ease';
+    sheet.style.transform='translateY(0)';
+    attachSwipeDismiss(overlay,sheet);
+  }
+}
+function closeModal(id){
+  const overlay=document.getElementById(id);
+  const sheet=overlay&&overlay.querySelector('.modal');
+  if(sheet){
+    sheet.style.transition='transform .2s ease';
+    sheet.style.transform='translateY(100%)';
+    setTimeout(()=>{overlay.style.display='none';sheet.style.transform='';},200);
+  } else if(overlay){
+    overlay.style.display='none';
+  }
+}
 function openSendModal(){openModal('modal-send');}
+
+function attachSwipeDismiss(overlay,sheet){
+  // Remove any previous listeners to avoid duplicates
+  if(sheet._swipeAttached) return;
+  sheet._swipeAttached=true;
+  let startY=0,startX=0,curY=0,dragging=false;
+  function onStart(e){
+    const t=e.touches?e.touches[0]:e;
+    startY=t.clientY; startX=t.clientX; curY=0; dragging=true;
+    sheet.style.transition='none';
+  }
+  function onMove(e){
+    if(!dragging) return;
+    const t=e.touches?e.touches[0]:e;
+    const dy=t.clientY-startY;
+    const dx=Math.abs(t.clientX-startX);
+    // Only dismiss on downward swipe, not horizontal scroll
+    if(dx>dy*1.5){dragging=false;return;}
+    curY=Math.max(0,dy); // don't allow swiping up
+    sheet.style.transform='translateY('+curY+'px)';
+    if(e.cancelable) e.preventDefault();
+  }
+  function onEnd(){
+    if(!dragging) return;
+    dragging=false;
+    // If dragged more than 80px down, dismiss
+    if(curY>80){
+      closeModal(overlay.id);
+    } else {
+      sheet.style.transition='transform .2s ease';
+      sheet.style.transform='translateY(0)';
+    }
+  }
+  // Attach to the handle for precise control, and also the sheet header area
+  sheet.addEventListener('touchstart',onStart,{passive:true});
+  sheet.addEventListener('touchmove',onMove,{passive:false});
+  sheet.addEventListener('touchend',onEnd,{passive:true});
+  // Tap the dark backdrop to dismiss too
+  overlay.addEventListener('click',function(e){
+    if(e.target===overlay) closeModal(overlay.id);
+  });
+}
 
 function showToast(msg){
   const t=document.getElementById('toast');
@@ -2161,13 +2231,7 @@ function svgBellLg(){return `<svg width="48" height="48" fill="none" stroke="cur
 // ===== INIT =====
 (async function init(){
   renderHome();
-  await load();
-  updateAlertBadge();
-  if(activeScreen==='home') renderHome();
-  if(activeScreen==='route') renderRoute();
-  if(activeScreen==='clients') renderClients();
-  if(activeScreen==='reports') renderReports();
-  if(activeScreen==='messages') renderMessagesList();
+  await load(); // load() now handles all re-renders after Supabase returns
 })();
 </script>
 </body>
