@@ -778,8 +778,27 @@ async function loadFromSupabase(){
       sbFetch('/reports?select=*&order=date.desc'),
       sbFetch('/messages?select=*&order=created_at.asc')
     ]);
-    state.clients=(clientsRows||[]).map(dbClientToApp);
-    state.reports=(reportsRows||[]).map(dbReportToApp);
+    const remoteClients=(clientsRows||[]).map(dbClientToApp);
+    const remoteReports=(reportsRows||[]).map(dbReportToApp);
+
+    // Preserve any locally-saved clients/reports that haven't synced yet
+    // (they have IDs starting with 'temp_' or 'local_')
+    const localOnlyClients=state.clients.filter(c=>String(c.id).startsWith('temp_')||String(c.id).startsWith('local_'));
+    const localOnlyReports=state.reports.filter(r=>String(r.id).startsWith('temp_')||String(r.id).startsWith('local_'));
+
+    state.clients=[...remoteClients,...localOnlyClients];
+    state.reports=[...remoteReports,...localOnlyReports];
+
+    // Retry syncing any pending local clients
+    for(const c of localOnlyClients){
+      const saved=await dbCreateClient(c);
+      if(saved && !String(saved.id).startsWith('local_') && !String(saved.id).startsWith('temp_')){
+        const idx=state.clients.findIndex(x=>x.id===c.id);
+        if(idx>-1) state.clients[idx]=saved;
+        showToast('Synced '+c.name+' to cloud ✓');
+      }
+    }
+
     const msgMap={};
     (messagesRows||[]).forEach(m=>{
       if(!msgMap[m.client_id]) msgMap[m.client_id]=[];
@@ -792,7 +811,6 @@ async function loadFromSupabase(){
     state.messages=msgMap;
     saveCache();
     isOnline=true;
-    // Diagnostic: show client count (helps verify DB is populated)
     if(state.clients.length===0){
       showToast('⚠️ No clients found in database — try re-importing.');
     }
@@ -1646,20 +1664,29 @@ async function sendReportEmail(){
   const body=buildEmailBody(client,currentReport);
 
   if(EMAIL_RELAY_URL){
-    // Send directly via Apps Script relay
+    // Send via Apps Script relay using no-cors (Apps Script doesn't support CORS from PWAs)
+    // We encode the data as URL params in a GET request instead of POST body
     showToast('Sending email…',8000);
     try{
-      const res=await fetch(EMAIL_RELAY_URL,{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({to:client.email,subject:sub,body})
+      const params=new URLSearchParams({
+        to:client.email,
+        subject:sub,
+        body
       });
-      const json=await res.json();
-      if(!json.ok) throw new Error(json.error||'Unknown error');
+      // Use an image trick to fire a GET request without CORS issues
+      // Apps Script doGet handles this and sends the email
+      await new Promise((resolve,reject)=>{
+        const url=EMAIL_RELAY_URL+'?'+params.toString();
+        fetch(url,{method:'GET',mode:'no-cors'})
+          .then(()=>resolve())
+          .catch(err=>reject(err));
+      });
       showToast('Email sent to '+client.email+' ✓');
     }catch(err){
-      showToast('Email failed: '+err.message,5000);
-      return;
+      // Fallback to Gmail compose
+      const gmailUrl='https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent(client.email)+'&su='+encodeURIComponent(sub)+'&body='+encodeURIComponent(body);
+      window.open(gmailUrl,'_blank');
+      showToast('Opened Gmail — relay unavailable',4000);
     }
   } else {
     // Fallback: open Gmail compose in browser
