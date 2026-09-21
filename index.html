@@ -436,6 +436,28 @@
       <div class="modal-title">New Report</div>
       <div id="report-form-client-info" style="margin-bottom:16px;font-size:14px;color:var(--text-muted)"></div>
 
+      <!-- Pool Photo Capture -->
+      <div class="form-group" style="margin-bottom:18px">
+        <label class="form-label">Pool Photo <span style="color:var(--red)">*</span></label>
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <div id="photo-preview-wrap" style="width:100px;height:100px;border-radius:10px;overflow:hidden;background:var(--gray-100);border:2px dashed var(--gray-300);display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer" onclick="document.getElementById('r-photo-input').click()">
+            <img id="photo-preview-img" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover">
+            <div id="photo-preview-placeholder" style="display:flex;flex-direction:column;align-items:center;gap:6px;color:var(--text-muted)">
+              <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              <span style="font-size:11px;font-weight:500">Tap to take<br>pool photo</span>
+            </div>
+          </div>
+          <div style="flex:1;padding-top:4px">
+            <input type="file" id="r-photo-input" accept="image/*" capture="environment" style="display:none" onchange="handlePhotoCapture(event)">
+            <button class="btn btn-secondary" style="width:100%;margin-bottom:8px" onclick="document.getElementById('r-photo-input').click()">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              Take Photo
+            </button>
+            <div id="photo-status-msg" style="font-size:12px;color:var(--text-muted);line-height:1.4">A photo of the pool is required for the report.</div>
+          </div>
+        </div>
+      </div>
+
       <div class="toggle-row">
         <span class="toggle-label">Salt Water Pool</span>
         <label class="toggle"><input type="checkbox" id="toggle-salt" onchange="toggleSaltSection()"><span class="toggle-track"></span></label>
@@ -511,15 +533,15 @@
   <div id="modal-send" class="modal-overlay" style="display:none">
     <div class="modal">
       <div class="modal-handle"></div>
-      <div class="modal-title">Send Report</div>
-      <p style="font-size:14px;color:var(--text-muted);margin-bottom:20px">Choose how to send this report to your client.</p>
-      <button class="btn btn-primary btn-full" onclick="sendReportEmail()" style="margin-bottom:10px">
+      <div class="modal-title">Report Ready</div>
+      <p style="font-size:14px;color:var(--text-muted);margin-bottom:20px">Choose how to deliver this report.</p>
+      <button class="btn btn-primary btn-full" onclick="sendReportEmail()" style="margin-bottom:12px">
         <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,12 2,6"/></svg>
-        Send via Email (Gmail)
+        Send via Email
       </button>
-      <button class="btn btn-outline btn-full" onclick="downloadPDF()" style="margin-bottom:10px">
-        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-        Download PDF
+      <button class="btn btn-primary btn-full" onclick="downloadPDF()" style="margin-bottom:12px">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Save Report
       </button>
       <button class="btn btn-secondary btn-full" onclick="closeModal('modal-send')">Cancel</button>
     </div>
@@ -631,6 +653,7 @@ let activeScreen = 'home';
 let screenStack = [];
 let editingClientId = null;
 let saltVal = '';
+let currentPoolPhoto = null; // base64 dataURL of captured pool photo
 let pendingSchedule = null;
 let isOnline = navigator.onLine;
 let isSyncing = false;
@@ -655,7 +678,20 @@ const RANGES = {
 // then update local cache. If offline, writes queue and the app keeps working
 // from cache so you're never blocked.
 
-function saveCache(){localStorage.setItem('palab_cache',JSON.stringify(state))}
+function saveCache(){
+  // Save state WITHOUT photo data (stored separately to keep cache lean)
+  const stateForCache={...state,reports:state.reports.map(r=>{
+    const {photoData,...rest}=r; return rest;
+  })};
+  localStorage.setItem('palab_cache',JSON.stringify(stateForCache));
+}
+function saveReportPhoto(reportId,photoData){
+  if(!reportId||!photoData) return;
+  try{localStorage.setItem('palab_photo_'+reportId,photoData);}catch(e){console.warn('Photo storage full',e);}
+}
+function loadReportPhoto(reportId){
+  try{return localStorage.getItem('palab_photo_'+reportId)||null;}catch(e){return null;}
+}
 function loadCache(){
   const s=localStorage.getItem('palab_cache');
   if(s){try{state=JSON.parse(s)}catch(e){}}
@@ -1112,18 +1148,70 @@ function nearestNeighborSort(clients, startLat, startLng) {
 // ===== CLIENTS =====
 function renderClients(){
   const cl=document.getElementById('clients-list');
-  if(!state.clients.length){cl.innerHTML=`<div class="empty"><div class="empty-icon">${svgPeople()}</div><h3>No clients yet</h3><p>Tap + to add your first client</p></div>`;return;}
-  const sorted=[...state.clients].sort((a,b)=>a.name.localeCompare(b.name));
-  cl.innerHTML=sorted.map(c=>`
-    <div class="list-item" onclick="openClientDetail('${c.id}')">
-      <div class="item-avatar">${initials(c.name)}</div>
-      <div class="item-info">
-        <div class="item-name">${c.name}</div>
-        <div class="item-sub">${c.address}</div>
-        <div class="item-meta">${(c.days||[]).map(d=>`<span class="meta-pill">${d}</span>`).join('')}${c.salt?'<span class="meta-pill" style="background:#E3F2FD;color:#0277BD">Salt</span>':''}</div>
-      </div>
-      <div class="chevron">${svgChevron()}</div>
-    </div>`).join('');
+  if(!state.clients.length){
+    cl.innerHTML=`<div class="empty"><div class="empty-icon">${svgPeople()}</div><h3>No clients yet</h3><p>Tap + to add your first client</p></div>`;
+    return;
+  }
+
+  // Group clients by their FIRST service day (in week order)
+  const dayOrder = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const groups = {}; // { Mon: [clients], Tue: [clients], ... }
+  const noDay = [];
+
+  state.clients.forEach(c => {
+    const days = c.days || [];
+    if(!days.length){ noDay.push(c); return; }
+    // Sort the client's days in week order, use first as primary grouping day
+    const primary = dayOrder.find(d => days.includes(d));
+    if(!groups[primary]) groups[primary] = [];
+    groups[primary].push(c);
+  });
+
+  // Sort clients within each day alphabetically
+  dayOrder.forEach(d => { if(groups[d]) groups[d].sort((a,b) => a.name.localeCompare(b.name)); });
+
+  let html = '';
+  dayOrder.forEach(day => {
+    if(!groups[day]) return;
+    html += `
+      <div style="padding:14px 20px 6px;background:var(--gray-50);border-bottom:1px solid var(--gray-200);position:sticky;top:0;z-index:10">
+        <span style="font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.8px">${DAY_FULL[day]}</span>
+        <span style="font-size:11px;color:var(--text-muted);margin-left:6px">${groups[day].length} client${groups[day].length!==1?'s':''}</span>
+      </div>`;
+    html += groups[day].map(c => `
+      <div class="list-item" onclick="openClientDetail('${c.id}')">
+        <div class="item-avatar">${initials(c.name)}</div>
+        <div class="item-info">
+          <div class="item-name">${c.name}</div>
+          <div class="item-sub">${c.address}</div>
+          <div class="item-meta">
+            ${(c.days||[]).map(d=>`<span class="meta-pill">${d}</span>`).join('')}
+            ${c.salt?'<span class="meta-pill" style="background:#E3F2FD;color:#0277BD">Salt</span>':''}
+            ${c.monthlyRate?`<span class="meta-pill" style="background:var(--green-light);color:var(--green)">$${c.monthlyRate}</span>`:''}
+          </div>
+        </div>
+        <div class="chevron">${svgChevron()}</div>
+      </div>`).join('');
+  });
+
+  // Clients with no day assigned go at the bottom
+  if(noDay.length){
+    html += `
+      <div style="padding:14px 20px 6px;background:var(--gray-50);border-bottom:1px solid var(--gray-200)">
+        <span style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px">Unscheduled</span>
+      </div>`;
+    html += noDay.sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`
+      <div class="list-item" onclick="openClientDetail('${c.id}')">
+        <div class="item-avatar">${initials(c.name)}</div>
+        <div class="item-info">
+          <div class="item-name">${c.name}</div>
+          <div class="item-sub">${c.address}</div>
+        </div>
+        <div class="chevron">${svgChevron()}</div>
+      </div>`).join('');
+  }
+
+  cl.innerHTML = html;
 }
 
 // ===== CLIENT DETAIL =====
@@ -1372,16 +1460,20 @@ function openReportDetail(reportId){
     {label:'Water Temperature',val:currentReport.temp,unit:'°F',key:'temp'},
   ].filter(r=>r.val!==undefined&&r.val!=='');
 
+  // Load photo for this report
+  const reportPhoto=currentReport.photoData||loadReportPhoto(currentReport.id);
+
   body.innerHTML=`
     <div class="report-header-card">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between">
-        <div>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+        ${reportPhoto?`<img src="${reportPhoto}" alt="Pool photo" style="width:90px;height:68px;object-fit:cover;border-radius:8px;flex-shrink:0;border:1px solid var(--gray-200)">`:''}
+        <div style="flex:1;min-width:0">
           <div class="report-client-name">${client.name}</div>
           <div class="report-client-sub">${client.address}</div>
           ${client.phone?`<div class="report-client-sub">${client.phone}</div>`:''}
           <div class="report-date">${formatDate(currentReport.date)}</div>
         </div>
-        <span class="badge badge-${currentReport.status}" style="margin-top:4px">${currentReport.status==='sent'?'✓ Sent':'Draft'}</span>
+        <span class="badge badge-${currentReport.status}" style="margin-top:4px;flex-shrink:0">${currentReport.status==='sent'?'✓ Sent':'Draft'}</span>
       </div>
     </div>
     <div class="report-section">
@@ -1394,9 +1486,9 @@ function openReportDetail(reportId){
     ${currentReport.comments?`<div class="report-section"><div class="report-section-title">Comments</div><div class="report-section-body"><p style="font-size:14px;color:var(--text);line-height:1.5">${currentReport.comments}</p></div></div>`:''}
     <div style="padding:20px;display:flex;flex-direction:column;gap:10px">
       ${currentReport.status==='sent'?
-        `<button class="btn btn-outline btn-full" onclick="downloadPDF()">Download PDF</button>
-         <button class="btn btn-primary btn-full" onclick="openNewReport('${client.id}')">New Report for ${client.name}</button>`:
-        `<button class="btn btn-primary btn-full" onclick="openSendModal()">Send Report</button>`}
+        `<button class="btn btn-primary btn-full" onclick="downloadPDF()">Save Report (PDF)</button>
+         <button class="btn btn-secondary btn-full" onclick="openNewReport('${client.id}')">New Report for ${client.name}</button>`:
+        `<button class="btn btn-primary btn-full" onclick="openSendModal()">Send / Save Report</button>`}
     </div>`;
   showScreen('report-detail');
 }
@@ -1412,7 +1504,33 @@ function openNewReport(clientId){
   ['r-chlorine','r-ph','r-alk','r-calcium','r-cya','r-phos','r-tds','r-temp','r-comments'].forEach(id=>{document.getElementById(id).value=''});
   saltVal='';
   document.querySelectorAll('.pill-opt').forEach(p=>{p.className='pill-opt'});
+  // Reset photo
+  currentPoolPhoto=null;
+  document.getElementById('r-photo-input').value='';
+  document.getElementById('photo-preview-img').style.display='none';
+  document.getElementById('photo-preview-img').src='';
+  document.getElementById('photo-preview-placeholder').style.display='flex';
+  document.getElementById('photo-status-msg').textContent='A photo of the pool is required for the report.';
+  document.getElementById('photo-status-msg').style.color='var(--text-muted)';
   openModal('modal-report');
+}
+
+function handlePhotoCapture(e){
+  const file=e.target.files&&e.target.files[0];
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    currentPoolPhoto=ev.target.result; // base64 dataURL
+    const img=document.getElementById('photo-preview-img');
+    img.src=currentPoolPhoto;
+    img.style.display='block';
+    document.getElementById('photo-preview-placeholder').style.display='none';
+    document.getElementById('photo-status-msg').textContent='Photo captured ✓';
+    document.getElementById('photo-status-msg').style.color='var(--green)';
+    document.getElementById('photo-preview-wrap').style.borderColor='var(--green)';
+    document.getElementById('photo-preview-wrap').style.borderStyle='solid';
+  };
+  reader.readAsDataURL(file);
 }
 
 function toggleSaltSection(){
@@ -1429,6 +1547,15 @@ function setSalt(v){
 async function saveReport(){
   const client=currentClient;
   if(!client){closeModal('modal-report');return;}
+  // Validate photo
+  if(!currentPoolPhoto){
+    document.getElementById('photo-status-msg').textContent='Please take a photo of the pool before saving.';
+    document.getElementById('photo-status-msg').style.color='var(--red)';
+    document.getElementById('photo-preview-wrap').style.borderColor='var(--red)';
+    document.getElementById('photo-preview-wrap').style.borderStyle='solid';
+    document.getElementById('photo-preview-wrap').scrollIntoView({behavior:'smooth',block:'center'});
+    return;
+  }
   const isSalt=document.getElementById('toggle-salt').checked;
   const tempId='temp_'+Date.now();
   const report={
@@ -1446,7 +1573,8 @@ async function saveReport(){
     phos:parseFloat(document.getElementById('r-phos').value)||undefined,
     tds:parseFloat(document.getElementById('r-tds').value)||undefined,
     temp:parseFloat(document.getElementById('r-temp').value)||undefined,
-    comments:document.getElementById('r-comments').value.trim()
+    comments:document.getElementById('r-comments').value.trim(),
+    photoData:currentPoolPhoto // base64 photo stored with report
   };
   // Update client salt preference locally + in DB
   const ci=state.clients.findIndex(c=>c.id===client.id);
@@ -1456,13 +1584,26 @@ async function saveReport(){
   }
   state.reports.push(report);
   saveCache();
+  // Save photo separately under the temp ID; will be re-saved under real ID after DB returns
+  saveReportPhoto(tempId, currentPoolPhoto);
   currentReport=report;
   closeModal('modal-report');
   openSendModal();
   const saved=await dbCreateReport(report);
   const idx=state.reports.findIndex(r=>r.id===tempId);
-  if(idx>-1) state.reports[idx]=saved;
-  if(currentReport.id===tempId) currentReport=saved;
+  if(saved && saved.id && saved.id!==tempId){
+    // Move photo to real ID
+    const photo=loadReportPhoto(tempId);
+    if(photo) saveReportPhoto(saved.id, photo);
+    try{localStorage.removeItem('palab_photo_'+tempId);}catch(e){}
+    saved.photoData=photo; // attach to real report object
+    if(idx>-1) state.reports[idx]=saved;
+    if(currentReport.id===tempId){currentReport=saved;}
+  } else {
+    // Keep temp record with photo attached
+    if(idx>-1){state.reports[idx].photoData=currentPoolPhoto;}
+    if(currentReport.id===tempId) currentReport.photoData=currentPoolPhoto;
+  }
   saveCache();
 }
 
@@ -1509,44 +1650,83 @@ function downloadPDF(){
   const report=currentReport;
   if(!report){closeModal('modal-send');return;}
   const client=state.clients.find(c=>c.id===report.clientId)||{name:'Unknown',address:'',phone:''};
+  // Load photo from separate storage if not attached to report object
+  if(!report.photoData && report.id){
+    report.photoData=loadReportPhoto(report.id);
+  }
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({unit:'pt',format:'letter'});
   const W=612,margin=48;
-  let y=margin;
+  let y=0;
 
-  // Header bg
+  // ---- BLUE HEADER BAR ----
   doc.setFillColor(21,101,192);
-  doc.rect(0,0,W,80,'F');
+  doc.rect(0,0,W,88,'F');
 
-  // Logo placeholder text (white)
+  // Business name + phone (white, left)
   doc.setTextColor(255,255,255);
   doc.setFontSize(22);doc.setFont('helvetica','bold');
-  doc.text('GK Swimming Pools',margin,50);
+  doc.text('GK Swimming Pools',margin,46);
   doc.setFontSize(10);doc.setFont('helvetica','normal');
-  doc.text('818-804-8204',margin,65);
+  doc.text('818-804-8204  •  Santa Clarita, CA',margin,64);
 
-  // Report label top right
+  // Report label + date (white, right)
   doc.setFontSize(11);doc.setFont('helvetica','bold');
-  doc.text('POOL SERVICE REPORT',W-margin,35,{align:'right'});
+  doc.text('POOL SERVICE REPORT',W-margin,38,{align:'right'});
   doc.setFont('helvetica','normal');doc.setFontSize(9);
-  doc.text(formatDate(report.date),W-margin,50,{align:'right'});
+  doc.text(formatDate(report.date),W-margin,54,{align:'right'});
+  const sentColor=report.status==='sent'?[72,199,116]:[200,200,200];
+  doc.setFillColor(...sentColor);doc.roundedRect(W-margin-60,62,60,18,3,3,'F');
+  doc.setTextColor(report.status==='sent'?[21,60,30]:[80,80,80]);
+  doc.setFontSize(8);doc.setFont('helvetica','bold');
+  doc.text(report.status==='sent'?'SENT':'DRAFT',W-margin-30,74,{align:'center'});
 
   y=100;
-  // Client info box
-  doc.setFillColor(243,246,253);doc.roundedRect(margin,y,W-2*margin,70,4,4,'F');
-  doc.setTextColor(26,26,46);doc.setFontSize(14);doc.setFont('helvetica','bold');
-  doc.text(client.name,margin+14,y+22);
-  doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(107,114,128);
-  doc.text(client.address,margin+14,y+38);
-  if(client.phone) doc.text(client.phone,margin+14,y+52);
-  // Status badge
-  const sentColor=report.status==='sent'?[46,125,50]:[158,158,158];
-  doc.setFillColor(...sentColor);doc.roundedRect(W-margin-80,y+14,80,24,4,4,'F');
-  doc.setTextColor(255,255,255);doc.setFontSize(9);doc.setFont('helvetica','bold');
-  doc.text(report.status==='sent'?'SENT':'DRAFT',W-margin-40,y+30,{align:'center'});
 
-  y+=90;
-  // Chemical Readings section
+  // ---- POOL PHOTO + CLIENT INFO (side by side) ----
+  const photoW=160, photoH=120, clientBoxX=margin+photoW+14;
+  const clientBoxW=W-margin-photoW-14-margin;
+
+  // Photo box (left)
+  if(report.photoData){
+    try{
+      // Draw photo with rounded corner effect using clip
+      doc.addImage(report.photoData,'JPEG',margin,y,photoW,photoH,undefined,'FAST');
+      // Subtle border around photo
+      doc.setDrawColor(200,210,230);doc.setLineWidth(.7);
+      doc.rect(margin,y,photoW,photoH);
+    }catch(e){
+      // If image fails, draw placeholder
+      doc.setFillColor(230,238,255);doc.rect(margin,y,photoW,photoH,'F');
+      doc.setTextColor(150,170,210);doc.setFontSize(9);doc.setFont('helvetica','normal');
+      doc.text('Pool Photo',margin+photoW/2,y+photoH/2,{align:'center'});
+    }
+  } else {
+    doc.setFillColor(230,238,255);doc.rect(margin,y,photoW,photoH,'F');
+    doc.setTextColor(150,170,210);doc.setFontSize(9);
+    doc.text('No Photo',margin+photoW/2,y+photoH/2,{align:'center'});
+  }
+
+  // Client info panel (right of photo)
+  doc.setFillColor(243,246,253);
+  doc.roundedRect(clientBoxX,y,clientBoxW,photoH,5,5,'F');
+  doc.setTextColor(26,26,46);doc.setFontSize(15);doc.setFont('helvetica','bold');
+  const nameLines=doc.splitTextToSize(client.name,clientBoxW-16);
+  doc.text(nameLines,clientBoxX+12,y+24);
+  const afterName=y+24+(nameLines.length-1)*18+6;
+  doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(107,114,128);
+  const addrLines=doc.splitTextToSize(client.address,clientBoxW-16);
+  doc.text(addrLines,clientBoxX+12,afterName+14);
+  if(client.phone){
+    doc.text(client.phone,clientBoxX+12,afterName+14+addrLines.length*13+10);
+  }
+  // "Prepared by" label at bottom of client box
+  doc.setFontSize(8);doc.setTextColor(150,160,185);
+  doc.text(`Prepared by GK Swimming Pools`,clientBoxX+12,y+photoH-10);
+
+  y+=photoH+18;
+
+  // ---- CHEMICAL READINGS ----
   doc.setTextColor(107,114,128);doc.setFontSize(9);doc.setFont('helvetica','bold');
   doc.text('CHEMICAL READINGS',margin,y);
   y+=8;doc.setDrawColor(224,224,224);doc.setLineWidth(.5);doc.line(margin,y,W-margin,y);y+=12;
@@ -1574,7 +1754,7 @@ function downloadPDF(){
   });
 
   if(report.salt&&report.saltLevel){
-    y+=12;
+    y+=14;
     doc.setTextColor(107,114,128);doc.setFontSize(9);doc.setFont('helvetica','bold');
     doc.text('SALT SYSTEM',margin,y);
     y+=8;doc.setDrawColor(224,224,224);doc.setLineWidth(.5);doc.line(margin,y,W-margin,y);y+=12;
@@ -1588,25 +1768,29 @@ function downloadPDF(){
   }
 
   if(report.comments){
-    y+=12;
+    y+=14;
     doc.setTextColor(107,114,128);doc.setFontSize(9);doc.setFont('helvetica','bold');
     doc.text('COMMENTS',margin,y);y+=8;
     doc.setDrawColor(224,224,224);doc.line(margin,y,W-margin,y);y+=12;
+    doc.setFillColor(250,251,255);doc.rect(margin,y-6,W-2*margin,doc.splitTextToSize(report.comments,W-2*margin-24).length*14+18,'F');
     doc.setTextColor(26,26,46);doc.setFontSize(10);doc.setFont('helvetica','normal');
-    const lines=doc.splitTextToSize(report.comments,W-2*margin-20);
-    doc.text(lines,margin+10,y);y+=lines.length*14+10;
+    const lines=doc.splitTextToSize(report.comments,W-2*margin-24);
+    doc.text(lines,margin+12,y+8);y+=lines.length*14+20;
   }
 
-  // Footer
+  // ---- FOOTER ----
   const footY=740;
-  doc.setFillColor(243,246,253);doc.rect(0,footY,W,72,'F');
-  doc.setTextColor(107,114,128);doc.setFontSize(9);doc.setFont('helvetica','normal');
-  doc.text('GK Swimming Pools  •  818-804-8204  •  Santa Clarita, CA',W/2,footY+22,{align:'center'});
-  doc.text('Thank you for your business!',W/2,footY+40,{align:'center'});
+  doc.setFillColor(21,101,192);doc.rect(0,footY,W,72,'F');
+  doc.setTextColor(255,255,255);doc.setFontSize(10);doc.setFont('helvetica','bold');
+  doc.text('GK Swimming Pools',W/2,footY+22,{align:'center'});
+  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(180,210,255);
+  doc.text('818-804-8204  •  gkswimmingpools@gmail.com  •  Santa Clarita, CA',W/2,footY+40,{align:'center'});
+  doc.setFontSize(8);doc.setTextColor(140,180,255);
+  doc.text('Thank you for your business!',W/2,footY+56,{align:'center'});
 
   doc.save(`GK_Pool_Report_${client.name.replace(/\s+/g,'_')}_${report.date}.pdf`);
   closeModal('modal-send');
-  showToast('PDF downloaded');
+  showToast('Report saved to Downloads ✓');
 }
 
 // ===== MESSAGES =====
