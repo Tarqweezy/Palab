@@ -298,7 +298,10 @@
   <!-- ===== CLIENTS SCREEN ===== -->
   <div id="screen-clients" class="screen">
     <div class="header">
-      <div class="header-title" style="font-size:22px">Clients</div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div class="header-title" style="font-size:22px">Clients</div>
+        <button onclick="debugSupabase()" style="font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid var(--gray-300);background:var(--gray-100);color:var(--text-muted);cursor:pointer">Test DB</button>
+      </div>
     </div>
     <div class="scroll-area" id="clients-list"></div>
     <button class="fab" onclick="openAddClient()">
@@ -785,6 +788,10 @@ async function loadFromSupabase(){
     state.messages=msgMap;
     saveCache();
     isOnline=true;
+    // Diagnostic: show client count (helps verify DB is populated)
+    if(state.clients.length===0){
+      showToast('⚠️ No clients found in database — try re-importing.');
+    }
   }catch(e){
     console.warn('Supabase load failed:',e);
     isOnline=false;
@@ -2192,10 +2199,33 @@ function attachSwipeDismiss(overlay,sheet){
   });
 }
 
-function showToast(msg){
+function showToast(msg,dur=2500){
   const t=document.getElementById('toast');
   t.textContent=msg;t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'),2500);
+  setTimeout(()=>t.classList.remove('show'),dur);
+}
+
+async function debugSupabase(){
+  showToast('Testing Supabase connection…',8000);
+  try{
+    const res=await fetch(SB_REST+'/clients?select=id,name&limit=5',{headers:SB_HEADERS});
+    const text=await res.text();
+    if(!res.ok){
+      showToast('❌ HTTP '+res.status+': '+text.slice(0,80),8000);
+      return;
+    }
+    const rows=JSON.parse(text);
+    if(!rows||rows.length===0){
+      showToast('⚠️ Connected but clients table is EMPTY — run Apps Script sync',8000);
+    } else {
+      showToast('✅ '+rows.length+' client(s) found: '+rows.map(r=>r.name).join(', '),8000);
+      // Force a full reload
+      await loadFromSupabase();
+      renderClients();
+    }
+  }catch(e){
+    showToast('❌ Fetch error: '+e.message,8000);
+  }
 }
 
 // Input range hints
